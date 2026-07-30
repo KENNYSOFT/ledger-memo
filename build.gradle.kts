@@ -1,3 +1,5 @@
+import org.gradle.api.tasks.testing.logging.TestExceptionFormat
+
 plugins {
     kotlin("jvm") version "2.3.21"
     kotlin("plugin.spring") version "2.3.21"
@@ -30,7 +32,9 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-actuator")
     implementation("org.jetbrains.kotlin:kotlin-reflect")
     implementation("tools.jackson.module:jackson-module-kotlin")
-    implementation("org.flywaydb:flyway-core")
+    // Boot 4 는 autoconfiguration 이 모듈로 분리되어 있다. flyway-core 만 넣으면
+    // 라이브러리는 있어도 마이그레이션이 실행되지 않는다 (flyway-core 는 transitive).
+    implementation("org.springframework.boot:spring-boot-flyway")
     implementation("org.flywaydb:flyway-mysql")
     runtimeOnly("com.mysql:mysql-connector-j")
 
@@ -62,6 +66,13 @@ allOpen {
 
 tasks.withType<Test> {
     useJUnitPlatform()
+    testLogging {
+        // 컨텍스트 로드 실패(스키마 검증 등)의 원인 체인을 CI 로그에서 바로 보기 위해.
+        // 기본 설정에서는 예외 클래스명만 남아 원인 추적이 불가능하다.
+        exceptionFormat = TestExceptionFormat.FULL
+        events("failed")
+        showStackTraces = true
+    }
 }
 
 graalvmNative {
