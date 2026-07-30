@@ -1,0 +1,13 @@
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+
+# 시크릿은 절대 커밋하지 않는다 (public repo). DESIGN.md 7.6
+.env
+*.env
+secrets/
+
+.kotlin/
+.idea/
+*.iml
+*.log
