@@ -133,13 +133,15 @@ podman exec -it ledger-mysql mysql -u ledger_memo -p ledger_memo
 mkdir -p ~/ledger-memo/att
 
 podman run -d --name ledger-memo --network ledger --restart=always \
-  -p 127.0.0.1:8080:8080 \
+  -p 127.0.0.1:8081:8080 \
   -v ~/ledger-memo/att:/data/att:Z \
   --env-file ~/.config/ledger-memo/env \
   ghcr.io/kennysoft/ledger-memo:latest
 ```
 
-- `127.0.0.1` 에만 publish 해 앞단 httpd 만 접근할 수 있게 한다.
+- 호스트 포트는 **8081** 이다 (8080 은 이 서버의 기존 서비스가 쓰고 있다). `127.0.0.1` 에만
+  publish 해 앞단 httpd 만 접근할 수 있게 한다. **컨테이너 내부 포트는 8080 그대로**이므로
+  앱 설정이나 이미지는 건드리지 않는다.
 - 첨부 파일은 호스트 디렉토리에 두어 컨테이너 교체와 무관하게 남는다. SELinux 환경에서는
   `:Z` 가 필요하다.
 - 🚨 **rootless 에서는 컨테이너의 uid 0 이 호스트의 실행 사용자로 매핑된다.** 홈 아래에 두면
@@ -168,7 +170,7 @@ sudo setsebool -P httpd_can_network_connect 1
 ## 7. 검증
 
 ```sh
-curl -s http://127.0.0.1:8080/api/ping
+curl -s http://127.0.0.1:8081/api/ping
 podman stats --no-stream ledger-memo
 ```
 
@@ -188,7 +190,7 @@ podman stats --no-stream ledger-memo
 podman pull ghcr.io/kennysoft/ledger-memo:latest
 podman rm -f ledger-memo
 podman run -d --name ledger-memo --network ledger --restart=always \
-  -p 127.0.0.1:8080:8080 \
+  -p 127.0.0.1:8081:8080 \
   -v ~/ledger-memo/att:/data/att:Z \
   --env-file ~/.config/ledger-memo/env \
   ghcr.io/kennysoft/ledger-memo:latest

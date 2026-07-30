@@ -283,7 +283,7 @@ graph TB
     subgraph A1["Oracle Cloud A1 (aarch64, 24GB)"]
         H["Apache httpd (기존, 호스트)<br/>TLS + 리버스 프록시"]
         subgraph POD["Podman (컨테이너 2개)"]
-            APP["ledger-memo<br/>native, arm64<br/>127.0.0.1:8080"]
+            APP["ledger-memo<br/>native, arm64<br/>127.0.0.1:8081"]
             DB["MySQL 8.4 LTS"]
         end
         V["~/ledger-memo/att<br/>영수증 사진"]
@@ -330,8 +330,8 @@ A1 단일 호스트, **Podman** 컨테이너 2개. **Compose 도 Quadlet 도 쓰
 
     ProxyPreserveHost On
     RequestHeader set X-Forwarded-Proto "https"
-    ProxyPass        / http://127.0.0.1:8080/
-    ProxyPassReverse / http://127.0.0.1:8080/
+    ProxyPass        / http://127.0.0.1:8081/
+    ProxyPassReverse / http://127.0.0.1:8081/
 
     # 사진 업로드 (앱 max-file-size 8MB 보다 약간 크게)
     LimitRequestBody 10485760
@@ -350,8 +350,11 @@ server:
 ```
 
 **`server.address` 를 loopback 으로 두지 말 것.** 컨테이너 내부에서 `127.0.0.1` 에 바인딩하면
-publish 된 포트가 붙지 못한다. 외부 노출 제한은 podman 의 `-p 127.0.0.1:8080:8080` 이 담당한다.
+publish 된 포트가 붙지 못한다. 외부 노출 제한은 podman 의 `-p 127.0.0.1:8081:8080` 이 담당한다.
 MySQL 컨테이너는 호스트 포트를 아예 publish 하지 않아 컨테이너 네트워크로만 접근된다.
+
+호스트 포트 8081 은 8080 이 서버의 기존 서비스에 점유되어 선택한 값이다. **컨테이너 내부
+포트는 8080 을 유지**하므로 앱 설정(`server.port`)과 이미지는 배포 환경과 무관하게 고정된다.
 
 **SELinux 주의 (Oracle Linux 계열)**: httpd 가 프록시로 바깥 연결을 맺는 것이 기본 정책에서
 막혀 502 가 난다. `setsebool -P httpd_can_network_connect 1` 이 필요하다. 볼륨 마운트에는
@@ -394,7 +397,7 @@ podman run -d --name ledger-mysql --network ledger --restart=always \
   docker.io/library/mysql:8.4
 
 podman run -d --name ledger-memo --network ledger --restart=always \
-  -p 127.0.0.1:8080:8080 \
+  -p 127.0.0.1:8081:8080 \
   -v ~/ledger-memo/att:/data/att:Z \
   --env-file ~/.config/ledger-memo/env \
   ghcr.io/kennysoft/ledger-memo:latest
@@ -422,7 +425,7 @@ set -e
 podman pull ghcr.io/kennysoft/ledger-memo:latest
 podman rm -f ledger-memo
 podman run -d --name ledger-memo --network ledger --restart=always \
-  -p 127.0.0.1:8080:8080 \
+  -p 127.0.0.1:8081:8080 \
   -v ~/ledger-memo/att:/data/att:Z \
   --env-file ~/.config/ledger-memo/env \
   ghcr.io/kennysoft/ledger-memo:latest
