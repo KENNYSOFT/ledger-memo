@@ -62,29 +62,30 @@ podman network create ledger
 ```sh
 mkdir -p ~/.config/ledger-memo && chmod 700 ~/.config/ledger-memo
 
-cat > ~/.config/ledger-memo/mysql.env <<'EOF'
-MYSQL_ROOT_PASSWORD=
+APP_PW=$(openssl rand -hex 24); ROOT_PW=$(openssl rand -hex 24)
+cat > ~/.config/ledger-memo/mysql.env <<EOF
+MYSQL_ROOT_PASSWORD=$ROOT_PW
 MYSQL_DATABASE=ledger_memo
 MYSQL_USER=ledger_memo
-MYSQL_PASSWORD=
+MYSQL_PASSWORD=$APP_PW
 EOF
-
-cat > ~/.config/ledger-memo/env <<'EOF'
+cat > ~/.config/ledger-memo/env <<EOF
 LEDGER_DB_URL=jdbc:mysql://ledger-mysql:3306/ledger_memo?connectionTimeZone=UTC
 LEDGER_DB_USER=ledger_memo
-LEDGER_DB_PASSWORD=
+LEDGER_DB_PASSWORD=$APP_PW
 EOF
-
-chmod 600 ~/.config/ledger-memo/*.env
+chmod 600 ~/.config/ledger-memo/*.env; unset APP_PW ROOT_PW
 ```
 
-그 다음 편집기로 암호를 채운다. **`mysql.env` 의 `MYSQL_PASSWORD` 와 `env` 의
-`LEDGER_DB_PASSWORD` 는 같은 값이어야 한다.**
+암호를 셸 변수로 두 파일에 한 번에 넣어 **값이 어긋날 여지를 없앤다** (`MYSQL_PASSWORD` 와
+`LEDGER_DB_PASSWORD` 는 반드시 같은 값이어야 한다).
 
-```sh
-vi ~/.config/ledger-memo/mysql.env
-vi ~/.config/ledger-memo/env
-```
+> 🚨 **암호에 특수문자를 쓰지 말 것.** 세 군데에서 깨진다.
+> - `#` — podman `--env-file` 파서가 주석으로 해석해 암호가 잘린다
+> - `${` — Spring 이 주입된 값 안의 placeholder 를 다시 해석하려 한다
+> - 백슬래시·따옴표 — MySQL entrypoint 의 계정 생성 SQL 이스케이프가 깨진다
+>
+> `openssl rand -hex 24` 는 영숫자 48자(192비트)로 충분하다.
 
 ## 3. MySQL 컨테이너
 
@@ -106,6 +107,12 @@ podman run -d --name ledger-mysql --network ledger --restart=always \
   정렬이 서버 설정에 좌우되므로 명시한다.
 - 데이터는 named volume `ledger-mysql-data` 에 남아 컨테이너를 지워도 유지된다
   (실제 경로는 `podman volume inspect ledger-mysql-data`).
+
+> 🚨 **암호를 바꿨으면 volume 을 지워야 반영된다.** mysql 이미지는 **첫 기동에만** 계정을
+> 만든다. `ledger-mysql-data` 가 이미 초기화된 뒤에 env 를 바꿔도 무시되어 인증이 실패한다.
+> ```sh
+> podman rm -f ledger-mysql && podman volume rm ledger-mysql-data
+> ```
 
 첫 기동은 DB 초기화 때문에 십수 초 걸린다. **준비 완료를 확인한 뒤 앱을 띄운다** (앱이 먼저
 뜨면 접속 실패로 재시작을 반복한다).
