@@ -286,7 +286,7 @@ graph TB
             APP["ledger-memo<br/>native, arm64<br/>127.0.0.1:8080"]
             DB["MySQL 8.4 LTS"]
         end
-        V["/var/lib/ledger-memo/att<br/>영수증 사진"]
+        V["~/ledger-memo/att<br/>영수증 사진"]
     end
     A -- "GHCR" --> APP
     P["폰 브라우저 (PWA)"] -- "HTTPS 서브도메인" --> H
@@ -301,7 +301,7 @@ A1 단일 호스트, **Podman** 컨테이너 2개. **Compose 도 Quadlet 도 쓰
 - **앞단**: 기존 Apache httpd(호스트)에 서브도메인 VirtualHost 추가 (Caddy 도입 없음).
 - **앱/DB**: `podman run` 2회. 오케스트레이션 계층을 두지 않는다.
 - **DB 는 호스트에 노출하지 않는다**: 컨테이너 네트워크 DNS 로 `ledger-mysql:3306` 접근.
-- **첨부**: 호스트 디렉토리 `/var/lib/ledger-memo/att` 를 볼륨 마운트 (컨테이너 교체와 무관하게
+- **첨부**: 호스트 디렉토리 `~/ledger-memo/att` 를 볼륨 마운트 (컨테이너 교체와 무관하게
   파일이 남아야 한다).
 
 ### 7.1 필수 제약
@@ -390,13 +390,13 @@ podman network create ledger
 
 podman run -d --name ledger-mysql --network ledger --restart=always \
   -v ledger-mysql-data:/var/lib/mysql \
-  --env-file /etc/ledger-memo/mysql.env \
+  --env-file ~/.config/ledger-memo/mysql.env \
   docker.io/library/mysql:8.4
 
 podman run -d --name ledger-memo --network ledger --restart=always \
   -p 127.0.0.1:8080:8080 \
-  -v /var/lib/ledger-memo/att:/data/att:Z \
-  --env-file /etc/ledger-memo/env \
+  -v ~/ledger-memo/att:/data/att:Z \
+  --env-file ~/.config/ledger-memo/env \
   ghcr.io/kennysoft/ledger-memo:latest
 ```
 
@@ -423,8 +423,8 @@ podman pull ghcr.io/kennysoft/ledger-memo:latest
 podman rm -f ledger-memo
 podman run -d --name ledger-memo --network ledger --restart=always \
   -p 127.0.0.1:8080:8080 \
-  -v /var/lib/ledger-memo/att:/data/att:Z \
-  --env-file /etc/ledger-memo/env \
+  -v ~/ledger-memo/att:/data/att:Z \
+  --env-file ~/.config/ledger-memo/env \
   ghcr.io/kennysoft/ledger-memo:latest
 ```
 
@@ -438,7 +438,7 @@ podman run -d --name ledger-memo --network ledger --restart=always \
 
 실행 절차는 [README](./README.md) 의 "최초 셋업" 을 단일 출처로 둔다. 설계상 지켜야 할 점만:
 
-- **비밀번호는 env 파일로만 다룬다** (`/etc/ledger-memo/{mysql.env,env}`, 권한 600).
+- **비밀번호는 env 파일로만 다룬다** (`~/.config/ledger-memo/{mysql.env,env}`, 권한 600).
   `podman run -e` 로 넘기면 shell history 와 `ps` 에 남는다.
 - **MySQL 컨테이너는 호스트 포트를 publish 하지 않는다.** 앱만 컨테이너 네트워크 DNS 로
   접근하므로 외부 노출면을 만들 이유가 없다.

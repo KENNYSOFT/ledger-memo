@@ -56,31 +56,34 @@ podman network create ledger
 
 비밀번호를 `podman run -e` 로 넘기면 shell history 와 `ps` 에 남으므로 env 파일로만 다룬다.
 
-```sh
-sudo mkdir -p /etc/ledger-memo && sudo chmod 700 /etc/ledger-memo
+> 🚨 **rootless podman 이면 파일 소유자가 컨테이너를 실행하는 사용자여야 한다.** root 소유
+> 600 파일은 `--env-file` 에서 `permission denied` 로 실패한다. 아래는 `opc` 기준이다.
 
-sudo tee /etc/ledger-memo/mysql.env >/dev/null <<'EOF'
+```sh
+mkdir -p ~/.config/ledger-memo && chmod 700 ~/.config/ledger-memo
+
+cat > ~/.config/ledger-memo/mysql.env <<'EOF'
 MYSQL_ROOT_PASSWORD=
 MYSQL_DATABASE=ledger_memo
 MYSQL_USER=ledger_memo
 MYSQL_PASSWORD=
 EOF
-sudo chmod 600 /etc/ledger-memo/mysql.env
 
-sudo tee /etc/ledger-memo/env >/dev/null <<'EOF'
+cat > ~/.config/ledger-memo/env <<'EOF'
 LEDGER_DB_URL=jdbc:mysql://ledger-mysql:3306/ledger_memo?connectionTimeZone=UTC
 LEDGER_DB_USER=ledger_memo
 LEDGER_DB_PASSWORD=
 EOF
-sudo chmod 600 /etc/ledger-memo/env
+
+chmod 600 ~/.config/ledger-memo/*.env
 ```
 
 그 다음 편집기로 암호를 채운다. **`mysql.env` 의 `MYSQL_PASSWORD` 와 `env` 의
 `LEDGER_DB_PASSWORD` 는 같은 값이어야 한다.**
 
 ```sh
-sudo vi /etc/ledger-memo/mysql.env
-sudo vi /etc/ledger-memo/env
+vi ~/.config/ledger-memo/mysql.env
+vi ~/.config/ledger-memo/env
 ```
 
 ## 3. MySQL 컨테이너
@@ -92,7 +95,7 @@ sudo vi /etc/ledger-memo/env
 ```sh
 podman run -d --name ledger-mysql --network ledger --restart=always \
   -v ledger-mysql-data:/var/lib/mysql \
-  --env-file /etc/ledger-memo/mysql.env \
+  --env-file ~/.config/ledger-memo/mysql.env \
   docker.io/library/mysql:8.4 \
   --character-set-server=utf8mb4 --collation-server=utf8mb4_0900_ai_ci
 ```
@@ -120,18 +123,21 @@ podman exec -it ledger-mysql mysql -u ledger_memo -p ledger_memo
 ## 4. 앱 컨테이너
 
 ```sh
-sudo mkdir -p /var/lib/ledger-memo/att
+mkdir -p ~/ledger-memo/att
 
 podman run -d --name ledger-memo --network ledger --restart=always \
   -p 127.0.0.1:8080:8080 \
-  -v /var/lib/ledger-memo/att:/data/att:Z \
-  --env-file /etc/ledger-memo/env \
+  -v ~/ledger-memo/att:/data/att:Z \
+  --env-file ~/.config/ledger-memo/env \
   ghcr.io/kennysoft/ledger-memo:latest
 ```
 
 - `127.0.0.1` 에만 publish 해 앞단 httpd 만 접근할 수 있게 한다.
 - 첨부 파일은 호스트 디렉토리에 두어 컨테이너 교체와 무관하게 남는다. SELinux 환경에서는
   `:Z` 가 필요하다.
+- 🚨 **rootless 에서는 컨테이너의 uid 0 이 호스트의 실행 사용자로 매핑된다.** 홈 아래에 두면
+  소유자가 자연히 맞지만, `/var/lib` 같은 시스템 경로를 쓰면 실행 사용자로 `chown` 해야
+  사진 저장이 permission denied 로 실패하지 않는다.
 - 이미지는 public 이라 `podman login` 없이 pull 된다.
 
 ## 5. 재부팅 자동 시작
@@ -176,8 +182,8 @@ podman pull ghcr.io/kennysoft/ledger-memo:latest
 podman rm -f ledger-memo
 podman run -d --name ledger-memo --network ledger --restart=always \
   -p 127.0.0.1:8080:8080 \
-  -v /var/lib/ledger-memo/att:/data/att:Z \
-  --env-file /etc/ledger-memo/env \
+  -v ~/ledger-memo/att:/data/att:Z \
+  --env-file ~/.config/ledger-memo/env \
   ghcr.io/kennysoft/ledger-memo:latest
 ```
 
@@ -190,5 +196,5 @@ DB 와 첨부 디렉토리 둘 다 대상이다.
 
 ```sh
 podman exec ledger-mysql sh -c 'mysqldump -u root -p"$MYSQL_ROOT_PASSWORD" ledger_memo' > ledger_memo.sql
-sudo tar czf ledger-memo-att.tar.gz -C /var/lib/ledger-memo att
+tar czf ledger-memo-att.tar.gz -C ~/ledger-memo att
 ```
