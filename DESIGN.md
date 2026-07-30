@@ -434,60 +434,18 @@ podman run -d --name ledger-memo --network ledger --restart=always \
   트리거만** 사용한다 (7.7 의 fork PR secret 유출 방지).
 - native 기동이 0.1초 수준이라 무중단 배포 장치는 필요 없다.
 
-### 7.6 초기 배포 절차 (A1, 1회)
+### 7.6 초기 배포
 
-비밀번호는 명령줄에 두지 않고 env 파일로만 다룬다 (shell history 노출 방지).
+실행 절차는 [README](./README.md) 의 "최초 셋업" 을 단일 출처로 둔다. 설계상 지켜야 할 점만:
 
-```bash
-# 1) 시크릿 파일 (권한 600). 암호는 직접 채운다.
-sudo mkdir -p /etc/ledger-memo && sudo chmod 700 /etc/ledger-memo
-
-sudo install -m 600 /dev/null /etc/ledger-memo/mysql.env
-sudo tee /etc/ledger-memo/mysql.env >/dev/null <<'EOF'
-MYSQL_ROOT_PASSWORD=
-MYSQL_DATABASE=ledger_memo
-MYSQL_USER=ledger_memo
-MYSQL_PASSWORD=
-EOF
-
-sudo install -m 600 /dev/null /etc/ledger-memo/env
-sudo tee /etc/ledger-memo/env >/dev/null <<'EOF'
-LEDGER_DB_URL=jdbc:mysql://ledger-mysql:3306/ledger_memo?connectionTimeZone=UTC
-LEDGER_DB_USER=ledger_memo
-LEDGER_DB_PASSWORD=
-EOF
-
-# 2) 첨부 디렉토리
-sudo mkdir -p /var/lib/ledger-memo/att
-
-# 3) 네트워크 + MySQL. 호스트 포트는 publish 하지 않는다.
-podman network create ledger
-podman run -d --name ledger-mysql --network ledger --restart=always \
-  -v ledger-mysql-data:/var/lib/mysql \
-  --env-file /etc/ledger-memo/mysql.env \
-  docker.io/library/mysql:8.4 \
-  --character-set-server=utf8mb4 --collation-server=utf8mb4_0900_ai_ci
-
-# 4) 앱. 스키마는 첫 기동 때 Flyway 가 만든다.
-podman run -d --name ledger-memo --network ledger --restart=always \
-  -p 127.0.0.1:8080:8080 \
-  -v /var/lib/ledger-memo/att:/data/att:Z \
-  --env-file /etc/ledger-memo/env \
-  ghcr.io/kennysoft/ledger-memo:latest
-
-# 5) 재부팅 자동 시작 (Podman 은 데몬이 없어 restart 정책만으로는 안 뜬다)
-sudo systemctl enable --now podman-restart.service
-
-# 6) SELinux (Oracle Linux 계열) — httpd 의 프록시 연결 허용
-sudo setsebool -P httpd_can_network_connect 1
-
-# 7) 검증
-curl -s http://127.0.0.1:8080/api/ping        # {"status":"ok","entryCount":0}
-podman stats --no-stream ledger-memo          # RSS 실측
-```
-
-`GET /api/ping` 이 200 을 반환하면 DB 연결, Flyway 마이그레이션 7개 테이블, JPA 매핑 검증이
-모두 통과한 것이다. 그 뒤 httpd VirtualHost(7.2)를 올리고 서브도메인 인증서를 발급한다.
+- **비밀번호는 env 파일로만 다룬다** (`/etc/ledger-memo/{mysql.env,env}`, 권한 600).
+  `podman run -e` 로 넘기면 shell history 와 `ps` 에 남는다.
+- **MySQL 컨테이너는 호스트 포트를 publish 하지 않는다.** 앱만 컨테이너 네트워크 DNS 로
+  접근하므로 외부 노출면을 만들 이유가 없다.
+- DB 와 앱 계정은 MySQL 이미지의 `MYSQL_DATABASE`/`MYSQL_USER`/`MYSQL_PASSWORD` 로 첫 기동
+  때 자동 생성되고, 테이블은 앱 첫 기동 때 Flyway 가 만든다. 수동 SQL 이 필요 없다.
+- **MySQL 준비 완료를 확인한 뒤 앱을 띄운다.** 앱이 먼저 뜨면 접속 실패로 재시작을 반복한다.
+- 검증은 `GET /api/ping` — 200 이면 DB 연결, Flyway 7개 테이블, JPA 매핑 검증이 모두 통과다.
 
 ### 7.7 공개 저장소 운영 규칙
 
