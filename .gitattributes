@@ -1,0 +1,4 @@
+# Linux CI/컨테이너에서 실행되므로 gradlew 은 LF 로 고정한다 (CRLF 면 bad interpreter).
+* text=auto eol=lf
+*.bat text eol=crlf
+*.jar binary
