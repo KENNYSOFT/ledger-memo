@@ -33,13 +33,15 @@ dependencies {
     implementation("org.jetbrains.kotlin:kotlin-reflect")
     implementation("tools.jackson.module:jackson-module-kotlin")
     // Boot 4 는 autoconfiguration 이 모듈로 분리되어 있다. flyway-core 만 넣으면
-    // 라이브러리는 있어도 마이그레이션이 실행되지 않는다 (flyway-core 는 transitive).
-    implementation("org.springframework.boot:spring-boot-flyway")
+    // 라이브러리는 있어도 마이그레이션이 실행되지 않는다.
+    implementation("org.springframework.boot:spring-boot-starter-flyway")
+    // Flyway 10+ 부터 MySQL 지원은 별도 모듈이고, 위 스타터에 포함되지 않는다.
     implementation("org.flywaydb:flyway-mysql")
     runtimeOnly("com.mysql:mysql-connector-j")
 
     testImplementation("org.springframework.boot:spring-boot-starter-webmvc-test")
     testImplementation("org.springframework.boot:spring-boot-starter-data-jpa-test")
+    testImplementation("org.springframework.boot:spring-boot-starter-flyway-test")
     testImplementation("org.springframework.boot:spring-boot-starter-security-test")
     testImplementation("org.springframework.boot:spring-boot-starter-validation-test")
     testImplementation("org.springframework.boot:spring-boot-starter-actuator-test")
