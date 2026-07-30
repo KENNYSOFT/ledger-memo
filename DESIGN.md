@@ -431,10 +431,65 @@ podman run -d --name ledger-memo --network ledger --restart=always \
 - `podman auto-update` 는 systemd 관리 컨테이너(Quadlet 등)만 대상으로 하므로 이 구성에서는
   쓸 수 없다. 대신 위 스크립트를 Actions 가 SSH 로 호출하거나, 수동으로 실행한다.
 - Actions 에서 호출하려면 SSH 키를 repo secret 에 둔다. **배포 워크플로는 `push`(main)
-  트리거만** 사용한다 (7.6 의 fork PR secret 유출 방지).
+  트리거만** 사용한다 (7.7 의 fork PR secret 유출 방지).
 - native 기동이 0.1초 수준이라 무중단 배포 장치는 필요 없다.
 
-### 7.6 공개 저장소 운영 규칙
+### 7.6 초기 배포 절차 (A1, 1회)
+
+비밀번호는 명령줄에 두지 않고 env 파일로만 다룬다 (shell history 노출 방지).
+
+```bash
+# 1) 시크릿 파일 (권한 600). 암호는 직접 채운다.
+sudo mkdir -p /etc/ledger-memo && sudo chmod 700 /etc/ledger-memo
+
+sudo install -m 600 /dev/null /etc/ledger-memo/mysql.env
+sudo tee /etc/ledger-memo/mysql.env >/dev/null <<'EOF'
+MYSQL_ROOT_PASSWORD=
+MYSQL_DATABASE=ledger_memo
+MYSQL_USER=ledger_memo
+MYSQL_PASSWORD=
+EOF
+
+sudo install -m 600 /dev/null /etc/ledger-memo/env
+sudo tee /etc/ledger-memo/env >/dev/null <<'EOF'
+LEDGER_DB_URL=jdbc:mysql://ledger-mysql:3306/ledger_memo?connectionTimeZone=UTC
+LEDGER_DB_USER=ledger_memo
+LEDGER_DB_PASSWORD=
+EOF
+
+# 2) 첨부 디렉토리
+sudo mkdir -p /var/lib/ledger-memo/att
+
+# 3) 네트워크 + MySQL. 호스트 포트는 publish 하지 않는다.
+podman network create ledger
+podman run -d --name ledger-mysql --network ledger --restart=always \
+  -v ledger-mysql-data:/var/lib/mysql \
+  --env-file /etc/ledger-memo/mysql.env \
+  docker.io/library/mysql:8.4 \
+  --character-set-server=utf8mb4 --collation-server=utf8mb4_0900_ai_ci
+
+# 4) 앱. 스키마는 첫 기동 때 Flyway 가 만든다.
+podman run -d --name ledger-memo --network ledger --restart=always \
+  -p 127.0.0.1:8080:8080 \
+  -v /var/lib/ledger-memo/att:/data/att:Z \
+  --env-file /etc/ledger-memo/env \
+  ghcr.io/kennysoft/ledger-memo:latest
+
+# 5) 재부팅 자동 시작 (Podman 은 데몬이 없어 restart 정책만으로는 안 뜬다)
+sudo systemctl enable --now podman-restart.service
+
+# 6) SELinux (Oracle Linux 계열) — httpd 의 프록시 연결 허용
+sudo setsebool -P httpd_can_network_connect 1
+
+# 7) 검증
+curl -s http://127.0.0.1:8080/api/ping        # {"status":"ok","entryCount":0}
+podman stats --no-stream ledger-memo          # RSS 실측
+```
+
+`GET /api/ping` 이 200 을 반환하면 DB 연결, Flyway 마이그레이션 7개 테이블, JPA 매핑 검증이
+모두 통과한 것이다. 그 뒤 httpd VirtualHost(7.2)를 올리고 서브도메인 인증서를 발급한다.
+
+### 7.7 공개 저장소 운영 규칙
 
 코드 공개 자체는 문제없지만 (인증 로직 공개는 보안에 영향 없음) 두 가지는 지킨다.
 
@@ -445,7 +500,7 @@ podman run -d --name ledger-memo --network ledger --restart=always \
   않는다 (fork PR 로 secret 이 유출되는 전형적 경로).
 - `.gitignore` 에 `.env`, `secrets/` 선반영.
 
-### 7.7 백업
+### 7.8 백업
 
 - `mysqldump` 일 1회 + 첨부 디렉토리 `tar`. 둘 다 대상이다.
 - 사진 용량 추정: 월 100장 x 400KB = 연 약 500MB.
