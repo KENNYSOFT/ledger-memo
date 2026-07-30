@@ -1,0 +1,43 @@
+spring:
+  application:
+    name: ledger-memo
+
+  # 필수 설정은 기본값을 두지 않는다. 미주입 시 기동이 실패해야 한다 (fail-fast).
+  datasource:
+    url: ${LEDGER_DB_URL}
+    username: ${LEDGER_DB_USER}
+    password: ${LEDGER_DB_PASSWORD}
+    hikari:
+      maximum-pool-size: 5
+
+  jpa:
+    open-in-view: false
+    hibernate:
+      # 스키마는 Flyway 가 관리한다. JPA 는 매핑 검증만 수행.
+      ddl-auto: validate
+    properties:
+      hibernate:
+        jdbc:
+          # Instant 를 UTC 로 저장. 표시 시각(KST) 변환은 애플리케이션 책임.
+          time_zone: UTC
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
+server:
+  port: 8080
+  # 컨테이너 내부에서는 모든 인터페이스에 바인딩한다. 외부 노출 제한은
+  # podman 의 -p 127.0.0.1:8080:8080 이 담당한다 (server.address 를 loopback 으로
+  # 두면 publish 가 붙지 못한다).
+  forward-headers-strategy: framework
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+
+logging:
+  level:
+    root: INFO
