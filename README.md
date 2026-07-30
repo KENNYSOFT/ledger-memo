@@ -41,13 +41,13 @@ export LEDGER_DB_PASSWORD='...'
 서버에서는 재생성 스크립트로 교체한다 (DESIGN.md 7.5).
 
 ```sh
-podman pull ghcr.io/KENNYSOFT/ledger-memo:latest
+podman pull ghcr.io/kennysoft/ledger-memo:latest
 podman rm -f ledger-memo
 podman run -d --name ledger-memo --network ledger --restart=always \
   -p 127.0.0.1:8080:8080 \
   -v /var/lib/ledger-memo/att:/data/att:Z \
   --env-file /etc/ledger-memo/env \
-  ghcr.io/KENNYSOFT/ledger-memo:latest
+  ghcr.io/kennysoft/ledger-memo:latest
 ```
 
 > Podman 은 데몬이 없어 `--restart=always` 만으로는 재부팅 시 컨테이너가 시작되지 않는다.

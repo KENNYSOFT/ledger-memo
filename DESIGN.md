@@ -397,7 +397,7 @@ podman run -d --name ledger-memo --network ledger --restart=always \
   -p 127.0.0.1:8080:8080 \
   -v /var/lib/ledger-memo/att:/data/att:Z \
   --env-file /etc/ledger-memo/env \
-  ghcr.io/<owner>/ledger-memo:latest
+  ghcr.io/kennysoft/ledger-memo:latest
 ```
 
 MySQL 은 포트를 publish 하지 않는다. 앱은 컨테이너 네트워크 DNS 로 `ledger-mysql:3306` 에
@@ -419,13 +419,13 @@ Actions 가 GHCR 에 이미지를 push 하고, 서버의 재생성 스크립트�
 #!/bin/sh
 # /usr/local/bin/deploy-ledger-memo.sh
 set -e
-podman pull ghcr.io/<owner>/ledger-memo:latest
+podman pull ghcr.io/kennysoft/ledger-memo:latest
 podman rm -f ledger-memo
 podman run -d --name ledger-memo --network ledger --restart=always \
   -p 127.0.0.1:8080:8080 \
   -v /var/lib/ledger-memo/att:/data/att:Z \
   --env-file /etc/ledger-memo/env \
-  ghcr.io/<owner>/ledger-memo:latest
+  ghcr.io/kennysoft/ledger-memo:latest
 ```
 
 - `podman auto-update` 는 systemd 관리 컨테이너(Quadlet 등)만 대상으로 하므로 이 구성에서는
