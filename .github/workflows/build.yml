@@ -39,7 +39,7 @@ jobs:
           distribution: temurin
           java-version: '25'
       - uses: gradle/actions/setup-gradle@v6
-      - run: ./gradlew build
+      - run: ./gradlew build --scan
       - name: 테스트 리포트 (실패 시)
         if: failure()
         uses: actions/upload-artifact@v4
@@ -59,7 +59,7 @@ jobs:
           java-version: '25'
           github-token: ${{ secrets.GITHUB_TOKEN }}
       - uses: gradle/actions/setup-gradle@v6
-      - run: ./gradlew nativeCompile -x test
+      - run: ./gradlew nativeCompile -x test --scan
       - name: 산출물 확인
         run: |
           ls -la build/native/nativeCompile/
