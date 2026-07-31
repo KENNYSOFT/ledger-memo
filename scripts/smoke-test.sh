@@ -125,10 +125,14 @@ curl -sf -b "$COOKIES" -X PATCH -H 'Content-Type: application/json' -H "X-XSRF-T
 curl -sf -b "$COOKIES" -X PATCH -H 'Content-Type: application/json' -H "X-XSRF-TOKEN: $CSRF" \
   -d '{"tags":[]}' "$BASE/api/entries/$ID" | grep -q '"tags":\[\]' || fail "태그 비우기가 실패했다"
 
-# 일괄 임포트 (실패 목록이 비어 있는 응답도 직렬화된다)
+# 일괄 임포트 (실패 목록이 비어 있는 응답도 직렬화된다).
+# 두 번째 줄은 날짜도 시각도 없으므로 첫 줄의 하위 항목으로 합쳐져야 한다. 따라서 결과는
+# 2건이 아니라 1건이고 합계는 두 줄의 합이다.
 BULK=$(curl -sf -b "$COOKIES" -H 'Content-Type: application/json' -H "X-XSRF-TOKEN: $CSRF" \
-  -d '{"text":"다이소 건전지 3000\n택시 7200"}' "$BASE/api/entries/bulk") \
+  -d '{"text":"7/31 다이소 건전지 3000\n물티슈 2000"}' "$BASE/api/entries/bulk") \
   || fail "일괄 임포트가 실패했다"
+echo "$BULK" | grep -q '"totalAmount":5000' \
+  || fail "하위 항목이 합쳐지지 않았다 (합계 5000 이어야 한다): $BULK"
 BULK_IDS=$(echo "$BULK" | grep -o '"id":[0-9]*' | cut -d: -f2)
 [ -n "$BULK_IDS" ] || fail "일괄 임포트 결과에 id 가 없다: $BULK"
 for bulk_id in $BULK_IDS; do

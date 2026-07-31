@@ -108,7 +108,8 @@ class EntryService(
             paymentHint = request.paymentHint,
             headcount = request.headcount ?: parsed.headcount,
             uncertain = parsed.uncertain,
-            memo = request.memo,
+            // 사용자가 적어 보낸 메모가 있으면 그쪽이 우선. 없으면 파서가 걸러낸 서술을 넣는다.
+            memo = request.memo ?: parsed.memo,
         )
         applyParsed(entry, parsed)
         return entryRepository.save(entry)
@@ -174,6 +175,7 @@ class EntryService(
         entry.totalAmount = parsed.totalAmount
         entry.headcount = parsed.headcount
         entry.uncertain = parsed.uncertain
+        entry.memo = parsed.memo
         applyParsed(entry, parsed)
         return EntryDetailResponse.from(entry)
     }
@@ -195,7 +197,11 @@ class EntryService(
     }
 
     /**
-     * 여러 줄을 각각 하나의 기록으로 만든다. Keep 에 쌓인 미완료분 이관용이다.
+     * 여러 줄을 기록으로 만든다. Keep 에 쌓인 미완료분 이관용이다.
+     *
+     * **날짜도 시각도 없는 줄은 직전 기록의 하위 항목으로 합친다.** Keep 에서 상하관계로
+     * 적어둔 주문 내역이 줄 단위로 쪼개지면 한 자리의 결제가 여러 기록이 되어, 합계도 사람도
+     * 흩어진다 (실측: 67줄을 넣었더니 13줄이 이렇게 흩어졌다).
      *
      * 한 줄이 실패해도 전체를 되돌리지 않는다. 수백 줄을 붙여넣었을 때 한 줄 때문에 전부
      * 날리는 편보다, 성공분을 남기고 실패한 원문을 돌려주어 손으로 처리하게 하는 편이 낫다.
@@ -204,18 +210,65 @@ class EntryService(
     fun bulkImport(text: String): BulkImportResponse {
         val created = mutableListOf<Entry>()
         val failed = mutableListOf<FailedLine>()
+        var current: Entry? = null
 
         text.lineSequence()
             .map { it.trim() }
             .filter { it.isNotEmpty() }
             .forEach { line ->
-                runCatching { createEntity(EntryCreateRequest(rawText = line)) }
-                    .onSuccess { created += it }
-                    .onFailure { failed += FailedLine(line, it.message ?: it::class.simpleName.orEmpty()) }
+                val parent = current
+                if (parent != null && !parser.hasDateOrTime(line)) {
+                    runCatching { appendLine(parent, line) }
+                        .onFailure { failed += FailedLine(line, it.message ?: it::class.simpleName.orEmpty()) }
+                } else {
+                    runCatching { createEntity(EntryCreateRequest(rawText = line)) }
+                        .onSuccess {
+                            created += it
+                            current = it
+                        }
+                        .onFailure { failed += FailedLine(line, it.message ?: it::class.simpleName.orEmpty()) }
+                }
             }
 
         // 방금 만든 기록이라 첨부는 아직 없다.
         return BulkImportResponse(created.map { EntrySummaryResponse.from(it, 0) }, failed)
+    }
+
+    /**
+     * 하위 항목 줄을 기존 기록에 덧붙인다.
+     *
+     * 원문은 줄바꿈으로 이어 붙여 원래의 상하관계를 알아볼 수 있게 남기고, 품목/사람은
+     * 기존 것에 더한다. 합계는 품목 합으로 다시 계산하되, 부모가 "총 N" 이나 금액을 명시해
+     * 두었으면 그 값을 지키지 않고 실제 품목 합을 쓴다 (하위 항목이 더 정확하다).
+     */
+    private fun appendLine(entry: Entry, line: String) {
+        val parsed = parse(line)
+
+        entry.rawText = listOfNotNull(entry.rawText?.takeIf { it.isNotBlank() }, line).joinToString("\n")
+        if (parsed.uncertain) entry.uncertain = true
+        if (entry.place == null) entry.place = parsed.place
+        if (entry.headcount == null) entry.headcount = parsed.headcount
+        parsed.memo?.let { memo ->
+            entry.memo = listOfNotNull(entry.memo?.takeIf { it.isNotBlank() }, memo).joinToString("\n")
+        }
+
+        var seq = entry.items.size
+        parsed.items.forEach { item ->
+            entry.items += EntryItem(entry, seq++, item.name, item.qty, item.unitPrice, item.amount)
+        }
+
+        parsed.personNames.forEach { name ->
+            personRepository.findByName(name)?.let { person ->
+                if (entry.persons.none { it.person.id == person.id }) {
+                    entry.persons += EntryPerson(entry, person, EntryPersonRole.ATTENDEE)
+                }
+            }
+        }
+
+        entry.tags += findOrCreateTags(parsed.tags.filter { tag -> entry.tags.none { it.name == tag } })
+
+        val amounts = entry.items.mapNotNull { it.amount }
+        if (amounts.isNotEmpty()) entry.totalAmount = amounts.sum()
     }
 
     /** 파싱 결과 중 자식 컬렉션(품목/사람/태그)을 반영한다. */
