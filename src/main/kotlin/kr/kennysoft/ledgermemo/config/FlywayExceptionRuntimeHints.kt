@@ -40,5 +40,5 @@ class FlywayExceptionRuntimeHints : RuntimeHintsRegistrar {
 }
 
 @Configuration(proxyBeanMethods = false)
-@ImportRuntimeHints(FlywayExceptionRuntimeHints::class)
+@ImportRuntimeHints(FlywayExceptionRuntimeHints::class, KotlinCollectionsRuntimeHints::class)
 class NativeHintsConfig

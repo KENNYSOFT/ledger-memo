@@ -36,9 +36,11 @@ class LineParser {
             place = state.place,
             items = state.items,
             totalAmount = if (amounts.isEmpty()) null else amounts.sum(),
-            personNames = state.persons.distinct(),
+            // distinct() 는 결과가 비면 kotlin.collections.EmptyList 를 돌려주고, 그것이
+            // native image 에서 Jackson 직렬화를 깨뜨린다 (KotlinCollectionsRuntimeHints 참고).
+            personNames = ArrayList(state.persons.distinct()),
             headcount = state.headcount,
-            tags = state.tags.distinct(),
+            tags = ArrayList(state.tags.distinct()),
             uncertain = uncertain,
         )
     }

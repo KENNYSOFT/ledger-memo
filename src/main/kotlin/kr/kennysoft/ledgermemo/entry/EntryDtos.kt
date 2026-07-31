@@ -219,7 +219,10 @@ data class EntryDetailResponse(
                 AttachmentResponse(requireNotNull(it.id), it.contentType, it.bytes, it.thumbPath != null)
             },
             persons = entry.persons.map { EntryPersonResponse.from(it) },
-            tags = entry.tags.map { it.name }.sorted(),
+            // sorted() 는 결과가 비면 kotlin.collections.EmptyList 를 돌려주고, 그것이
+            // native image 에서 Jackson 직렬화를 깨뜨린다 (KotlinCollectionsRuntimeHints 참고).
+            // 힌트로도 막지만 애초에 만들지 않는 편이 안전하다.
+            tags = ArrayList(entry.tags.map { it.name }.sorted()),
         )
     }
 }
