@@ -29,7 +29,7 @@ class EntryController(
     @PostMapping("/api/entries")
     @ResponseStatus(HttpStatus.CREATED)
     fun create(@Valid @RequestBody request: EntryCreateRequest): EntryDetailResponse =
-        EntryDetailResponse.from(entryService.create(request))
+        entryService.create(request)
 
     /** 여러 줄을 한 번에 기록으로 만든다 (Keep 미완료분 이관). */
     @PostMapping("/api/entries/bulk")
@@ -48,7 +48,7 @@ class EntryController(
     ): Map<String, Any> {
         val result = entryService.search(status, from, to, q, personId, PageRequest.of(page, size.coerceIn(1, 200)))
         return mapOf(
-            "content" to result.content.map { EntrySummaryResponse.from(it) },
+            "content" to result.content,
             "page" to result.number,
             "totalPages" to result.totalPages,
             "totalElements" to result.totalElements,
@@ -57,26 +57,25 @@ class EntryController(
 
     /** 작성 화면 하단의 "최근 저장" 3건. */
     @GetMapping("/api/entries/recent")
-    fun recent(): List<EntrySummaryResponse> = entryService.recent().map { EntrySummaryResponse.from(it) }
+    fun recent(): List<EntrySummaryResponse> = entryService.recent()
 
     /** 카테고리/결제수단/태그 자동완성 후보. */
     @GetMapping("/api/hints")
     fun hints(): HintsResponse = entryService.hints()
 
     @GetMapping("/api/entries/{id}")
-    fun get(@PathVariable id: Long): EntryDetailResponse = EntryDetailResponse.from(entryService.get(id))
+    fun get(@PathVariable id: Long): EntryDetailResponse = entryService.getDetail(id)
 
     @PatchMapping("/api/entries/{id}")
     fun patch(@PathVariable id: Long, @Valid @RequestBody request: EntryPatchRequest): EntryDetailResponse =
-        EntryDetailResponse.from(entryService.patch(id, request))
+        entryService.patch(id, request)
 
     @PostMapping("/api/entries/{id}/reparse")
-    fun reparse(@PathVariable id: Long): EntryDetailResponse =
-        EntryDetailResponse.from(entryService.reparse(id))
+    fun reparse(@PathVariable id: Long): EntryDetailResponse = entryService.reparse(id)
 
     @PutMapping("/api/entries/{id}/status")
     fun changeStatus(@PathVariable id: Long, @RequestBody request: StatusRequest): EntryDetailResponse =
-        EntryDetailResponse.from(entryService.changeStatus(id, request.status))
+        entryService.changeStatus(id, request.status)
 
     @DeleteMapping("/api/entries/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)

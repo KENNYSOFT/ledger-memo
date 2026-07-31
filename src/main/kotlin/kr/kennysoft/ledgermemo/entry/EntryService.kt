@@ -1,5 +1,6 @@
 package kr.kennysoft.ledgermemo.entry
 
+import kr.kennysoft.ledgermemo.attachment.AttachmentRepository
 import kr.kennysoft.ledgermemo.parse.LineParser
 import kr.kennysoft.ledgermemo.parse.ParsedLine
 import kr.kennysoft.ledgermemo.parse.PersonDictionary
@@ -19,12 +20,22 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
 
+/**
+ * 기록 관련 유스케이스.
+ *
+ * 🚨 **바깥으로는 엔티티가 아니라 DTO 를 돌려준다.** `open-in-view=false` 이므로 트랜잭션이
+ * 끝나면 세션이 닫히고, 컨트롤러에서 lazy 컬렉션을 건드리면
+ * `LazyInitializationException` 이 된다. 변환은 반드시 트랜잭션 경계 안에서 끝내야 한다.
+ * (실측: 목록 조회가 전부 500 이었고, `@Transactional` 이 붙은 테스트는 세션이 열린 채라
+ * 이 결함을 잡지 못했다.)
+ */
 @Service
 @Transactional(readOnly = true)
 class EntryService(
     private val entryRepository: EntryRepository,
     private val personRepository: PersonRepository,
     private val tagRepository: TagRepository,
+    private val attachmentRepository: AttachmentRepository,
     private val parser: LineParser,
     private val clock: Clock,
 ) {
@@ -39,12 +50,34 @@ class EntryService(
         q: String?,
         personId: Long?,
         pageable: Pageable,
-    ): Page<Entry> = entryRepository.search(status, from, to, q?.takeIf { it.isNotBlank() }, personId, pageable)
+    ): Page<EntrySummaryResponse> {
+        val page = entryRepository.search(status, from, to, q?.takeIf { it.isNotBlank() }, personId, pageable)
+        val counts = attachmentCounts(page.content)
+        return page.map { EntrySummaryResponse.from(it, counts[it.id] ?: 0) }
+    }
 
+    fun getDetail(id: Long): EntryDetailResponse = EntryDetailResponse.from(get(id))
+
+    fun recent(): List<EntrySummaryResponse> = toSummaries(entryRepository.findTop3ByOrderByCreatedAtDesc())
+
+    /**
+     * 엔티티를 그대로 쓰는 내부 조회. 호출자가 트랜잭션 안에 있어야 한다.
+     *
+     * 첨부 업로드처럼 엔티티가 필요한 경로에서만 쓴다.
+     */
     fun get(id: Long): Entry = entryRepository.findWithItemsById(id)
         .orElseThrow { ResponseStatusException(HttpStatus.NOT_FOUND, "entry $id 없음") }
 
-    fun recent(): List<Entry> = entryRepository.findTop3ByOrderByCreatedAtDesc()
+    private fun toSummaries(entries: List<Entry>): List<EntrySummaryResponse> {
+        val counts = attachmentCounts(entries)
+        return entries.map { EntrySummaryResponse.from(it, counts[it.id] ?: 0) }
+    }
+
+    private fun attachmentCounts(entries: List<Entry>): Map<Long, Int> {
+        val ids = entries.mapNotNull { it.id }
+        if (ids.isEmpty()) return emptyMap()
+        return attachmentRepository.countByEntryIds(ids).associate { it.entryId to it.count.toInt() }
+    }
 
     /**
      * 원문을 파싱해 저장한다. 사용자가 칩에서 고친 값이 있으면 그쪽이 우선한다.
@@ -53,7 +86,13 @@ class EntryService(
      * true 면 원문 없이 통과시킨다. 첨부는 생성 직후 별도 요청으로 붙는다.
      */
     @Transactional
-    fun create(request: EntryCreateRequest): Entry {
+    fun create(request: EntryCreateRequest): EntryDetailResponse =
+        EntryDetailResponse.from(createEntity(request))
+
+    /**
+     * 저장한 엔티티를 그대로 돌려준다. 일괄 임포트처럼 같은 트랜잭션에서 이어 쓰는 경로용이다.
+     */
+    private fun createEntity(request: EntryCreateRequest): Entry {
         if (request.rawText.isNullOrBlank() && !request.attachmentOnly) {
             throw ResponseStatusException(HttpStatus.BAD_REQUEST, "원문과 첨부 중 하나는 있어야 한다")
         }
@@ -76,7 +115,7 @@ class EntryService(
     }
 
     @Transactional
-    fun patch(id: Long, request: EntryPatchRequest): Entry {
+    fun patch(id: Long, request: EntryPatchRequest): EntryDetailResponse {
         val entry = get(id)
         request.occurredOn?.let { entry.occurredOn = it }
         request.occurredAt?.let { entry.occurredAt = it }
@@ -104,7 +143,7 @@ class EntryService(
             entry.tags.clear()
             entry.tags += findOrCreateTags(cleaned)
         }
-        return entry
+        return EntryDetailResponse.from(entry)
     }
 
     /** 자유 입력 필드의 자동완성 후보. 후보가 너무 많으면 고르기 어려워 상한을 둔다. */
@@ -123,7 +162,7 @@ class EntryService(
      * 사용자가 손으로 고친 값까지 되돌리게 되므로, 화면에서 확인을 받은 뒤 호출해야 한다.
      */
     @Transactional
-    fun reparse(id: Long): Entry {
+    fun reparse(id: Long): EntryDetailResponse {
         val entry = get(id)
         val rawText = entry.rawText
             ?: throw ResponseStatusException(HttpStatus.BAD_REQUEST, "원문이 없어 재파싱할 수 없다")
@@ -136,15 +175,15 @@ class EntryService(
         entry.headcount = parsed.headcount
         entry.uncertain = parsed.uncertain
         applyParsed(entry, parsed)
-        return entry
+        return EntryDetailResponse.from(entry)
     }
 
     @Transactional
-    fun changeStatus(id: Long, status: EntryStatus): Entry {
+    fun changeStatus(id: Long, status: EntryStatus): EntryDetailResponse {
         val entry = get(id)
         entry.status = status
         entry.doneAt = if (status == EntryStatus.DONE) Instant.now(clock) else null
-        return entry
+        return EntryDetailResponse.from(entry)
     }
 
     @Transactional
@@ -170,12 +209,13 @@ class EntryService(
             .map { it.trim() }
             .filter { it.isNotEmpty() }
             .forEach { line ->
-                runCatching { create(EntryCreateRequest(rawText = line)) }
+                runCatching { createEntity(EntryCreateRequest(rawText = line)) }
                     .onSuccess { created += it }
                     .onFailure { failed += FailedLine(line, it.message ?: it::class.simpleName.orEmpty()) }
             }
 
-        return BulkImportResponse(created.map { EntrySummaryResponse.from(it) }, failed)
+        // 방금 만든 기록이라 첨부는 아직 없다.
+        return BulkImportResponse(created.map { EntrySummaryResponse.from(it, 0) }, failed)
     }
 
     /** 파싱 결과 중 자식 컬렉션(품목/사람/태그)을 반영한다. */

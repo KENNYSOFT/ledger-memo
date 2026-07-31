@@ -157,7 +157,12 @@ data class BulkImportResponse(
 
 data class FailedLine(val text: String, val reason: String)
 
-/** 목록용 요약. 품목/첨부 전체를 싣지 않는다. */
+/**
+ * 목록용 요약. 품목/첨부 전체를 싣지 않는다.
+ *
+ * 첨부 개수는 엔티티의 lazy 컬렉션을 건드리지 않고 [attachmentCount] 로 받는다. 목록은
+ * 페이지 단위로 카운트를 한 번에 조회하므로 행마다 쿼리가 나가지 않는다.
+ */
 data class EntrySummaryResponse(
     val id: Long,
     val occurredOn: LocalDate,
@@ -167,11 +172,10 @@ data class EntrySummaryResponse(
     val uncertain: Boolean,
     val status: EntryStatus,
     val rawText: String?,
-    val itemCount: Int,
     val attachmentCount: Int,
 ) {
     companion object {
-        fun from(entry: Entry) = EntrySummaryResponse(
+        fun from(entry: Entry, attachmentCount: Int) = EntrySummaryResponse(
             id = requireNotNull(entry.id),
             occurredOn = entry.occurredOn,
             occurredAt = entry.occurredAt,
@@ -180,8 +184,7 @@ data class EntrySummaryResponse(
             uncertain = entry.uncertain,
             status = entry.status,
             rawText = entry.rawText,
-            itemCount = entry.items.size,
-            attachmentCount = entry.attachments.size,
+            attachmentCount = attachmentCount,
         )
     }
 }
