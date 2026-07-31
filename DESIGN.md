@@ -241,6 +241,7 @@ CREATE TABLE ledger_memo.attachment (
 | `POST` | `/api/entries/{id}/attachments` | 사진 업로드 (multipart) |
 | `GET` | `/api/attachments/{id}` | 원본. `?thumb=true` 로 썸네일 |
 | `POST` | `/api/entries/bulk` | 여러 줄 일괄 등록 (Keep 미완료분 이관) |
+| `GET` | `/api/hints` | 카테고리/결제수단/태그 자동완성 후보 |
 | `GET` | `/api/persons` · `POST` | 사람 마스터 |
 | `GET` | `/api/settlements` | 사람별 미정산 합계 |
 | `POST` | `/api/entries/{id}/persons` | 거래에 사람 추가 |
@@ -538,9 +539,11 @@ podman run -d --name ledger-memo --network=host --restart=always \
    httpd VirtualHost + 인증 + 백업 스크립트(cron).
 4. ~~**3단계 (편의)**~~ — 완료. 정산 뷰, 상세/보강 화면, 검색/필터, PWA 오프라인 큐,
    Keep 미완료분 일괄 임포트.
-5. **4단계 (남음)** — 상세 보강 화면 고도화. 카테고리/결제수단은 지금 자유 입력이라
-   같은 값을 매번 새로 타이핑해야 한다. 기존 입력값 기반 자동완성이 다음 후보다.
-   태그도 파서가 붙이기만 하고 화면에서 편집할 수단이 없다.
+5. ~~**4단계**~~ — 완료. 카테고리/결제수단/태그 자동완성과 태그 편집.
+
+자유 입력 필드는 마스터 테이블이 없으므로(3.2) **지금까지의 입력이 그대로 사전**이 된다.
+`/api/hints` 가 많이 쓴 순서로 후보를 돌려주고, 단일 값 필드는 `datalist` 로, 태그는 탭해서
+넣는 칩으로 붙인다 (쉼표로 나열하는 입력에는 `datalist` 가 매칭되지 않는다).
 
 ## 9. 스코프 밖 (의도적 제외)
 

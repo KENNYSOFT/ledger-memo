@@ -85,7 +85,9 @@ CREATED=$(curl -sf -b "$COOKIES" -H 'Content-Type: application/json' -H "X-XSRF-
 echo "$CREATED" | grep -q '"totalAmount":55000' || fail "파싱 결과가 다르다: $CREATED"
 echo "$CREATED" | grep -q '"place":"원조해장촌"' || fail "장소가 다르다: $CREATED"
 
-ID=$(echo "$CREATED" | sed -n 's/.*"id":\([0-9]*\).*/\1/p' | head -1)
+# 응답에는 품목·첨부의 id 도 들어 있다. 맨 앞(entry 자신)만 집어야 한다 - greedy 매칭으로
+# 마지막 id 를 잡으면 엉뚱한 대상을 조회하게 된다.
+ID=$(echo "$CREATED" | grep -o '"id":[0-9]*' | head -1 | cut -d: -f2)
 [ -n "$ID" ] || fail "생성된 id 를 읽지 못했다: $CREATED"
 
 # 파싱 미리보기도 같은 직렬화 경로를 탄다.
@@ -97,6 +99,29 @@ curl -sf -b "$COOKIES" -H 'Content-Type: application/json' -H "X-XSRF-TOKEN: $CS
 curl -sf -b "$COOKIES" "$BASE/api/entries" | grep -q '"content"' || fail "목록 조회가 실패했다"
 curl -sf -b "$COOKIES" "$BASE/api/entries/$ID" | grep -q '"items"' || fail "상세 조회가 실패했다"
 curl -sf -b "$COOKIES" "$BASE/api/settlements" > /dev/null || fail "정산 조회가 실패했다"
+
+# 힌트는 데이터가 없으면 빈 목록을 돌려준다. 빈 컬렉션 직렬화 경로를 함께 검증한다.
+curl -sf -b "$COOKIES" "$BASE/api/hints" | grep -q '"categories"' || fail "힌트 조회가 실패했다"
+
+# 태그를 붙이고 되읽어 PATCH 의 태그 교체가 동작하는지 확인한다.
+curl -sf -b "$COOKIES" -X PATCH -H 'Content-Type: application/json' -H "X-XSRF-TOKEN: $CSRF" \
+  -d '{"tags":["회사","가족"],"categoryHint":"식비"}' "$BASE/api/entries/$ID" \
+  | grep -q '"회사"' || fail "태그 수정이 반영되지 않았다"
+
+# 빈 배열로 보내면 태그가 모두 떨어져야 한다 (빈 목록 직렬화 재확인).
+curl -sf -b "$COOKIES" -X PATCH -H 'Content-Type: application/json' -H "X-XSRF-TOKEN: $CSRF" \
+  -d '{"tags":[]}' "$BASE/api/entries/$ID" | grep -q '"tags":\[\]' || fail "태그 비우기가 실패했다"
+
+# 일괄 임포트 (실패 목록이 비어 있는 응답도 직렬화된다)
+BULK=$(curl -sf -b "$COOKIES" -H 'Content-Type: application/json' -H "X-XSRF-TOKEN: $CSRF" \
+  -d '{"text":"다이소 건전지 3000\n택시 7200"}' "$BASE/api/entries/bulk") \
+  || fail "일괄 임포트가 실패했다"
+BULK_IDS=$(echo "$BULK" | grep -o '"id":[0-9]*' | cut -d: -f2)
+[ -n "$BULK_IDS" ] || fail "일괄 임포트 결과에 id 가 없다: $BULK"
+for bulk_id in $BULK_IDS; do
+  curl -sf -b "$COOKIES" -H "X-XSRF-TOKEN: $CSRF" -X DELETE "$BASE/api/entries/$bulk_id" > /dev/null \
+    || fail "임포트분 삭제가 실패했다 (id=$bulk_id)"
+done
 
 # 정리 (테스트 DB 에 흔적을 남기지 않는다)
 curl -sf -b "$COOKIES" -H "X-XSRF-TOKEN: $CSRF" -X DELETE "$BASE/api/entries/$ID" \
