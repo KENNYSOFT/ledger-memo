@@ -58,7 +58,7 @@ echo "기동 완료"
 
 # CSRF 쿠키를 받아 로그인한다 (CookieCsrfTokenRepository).
 curl -sf -c "$COOKIES" "$BASE/login.html" > /dev/null || fail "로그인 페이지를 받지 못했다"
-CSRF=$(awk '/XSRF-TOKEN/ { print $7 }' "$COOKIES")
+CSRF=$(awk '/XSRF-TOKEN/ { print $7 }' "$COOKIES" | head -1)
 [ -n "$CSRF" ] || fail "CSRF 쿠키가 내려오지 않았다"
 
 curl -sf -b "$COOKIES" -c "$COOKIES" -o /dev/null \
@@ -69,11 +69,14 @@ curl -sf -b "$COOKIES" -c "$COOKIES" -o /dev/null \
 
 # 로그인 실패도 302(/login.html?error)라서 curl 의 종료 코드로는 구분되지 않는다.
 # 인증이 실제로 됐는지 API 로 확인해야 뒤쪽 실패를 오진하지 않는다.
-CODE=$(curl -s -o /dev/null -w '%{http_code}' -b "$COOKIES" "$BASE/api/entries")
+#
+# 이 요청에 -c 가 반드시 있어야 한다. Spring Security 는 로그인 성공 시 세션 고정 방어로
+# 기존 CSRF 토큰을 폐기하고 새 토큰은 다음 요청에서 만들어 내려준다. 여기서 쿠키를 저장하지
+# 않으면 폐기된 상태만 남아 뒤이은 POST 가 전부 403 이 된다.
+CODE=$(curl -s -o /dev/null -w '%{http_code}' -b "$COOKIES" -c "$COOKIES" "$BASE/api/entries")
 [ "$CODE" = "200" ] || fail "로그인 후에도 인증되지 않았다 (HTTP $CODE)"
 
-# 로그인 성공 시 세션이 새로 발급되면서 CSRF 토큰도 갱신된다.
-CSRF=$(awk '/XSRF-TOKEN/ { print $7 }' "$COOKIES")
+CSRF=$(awk '/XSRF-TOKEN/ { print $7 }' "$COOKIES" | head -1)
 [ -n "$CSRF" ] || fail "로그인 후 CSRF 쿠키가 없다"
 
 # 태그가 없는 저장이 핵심 회귀 지점이다. 응답의 빈 태그 목록이 EmptyList 로 만들어지면
