@@ -98,10 +98,20 @@ curl -sf -b "$COOKIES" -H 'Content-Type: application/json' -H "X-XSRF-TOKEN: $CS
   -d '{"text":"택시 8100"}' "$BASE/api/parse" | grep -q '"totalAmount":8100' \
   || fail "파싱 미리보기가 실패했다"
 
-# 목록·상세 조회
+# 목록·상세 조회. 저장 응답과 달리 이쪽은 DB 에서 다시 읽은 엔티티를 직렬화하므로,
+# lazy 컬렉션을 트랜잭션 밖에서 건드리면 여기서 500 이 된다 (DESIGN.md 7.1).
 curl -sf -b "$COOKIES" "$BASE/api/entries" | grep -q '"content"' || fail "목록 조회가 실패했다"
+curl -sf -b "$COOKIES" "$BASE/api/entries/recent" > /dev/null || fail "최근 목록 조회가 실패했다"
 curl -sf -b "$COOKIES" "$BASE/api/entries/$ID" | grep -q '"items"' || fail "상세 조회가 실패했다"
 curl -sf -b "$COOKIES" "$BASE/api/settlements" > /dev/null || fail "정산 조회가 실패했다"
+
+# 상태 전환과 재파싱도 조회한 엔티티를 직렬화한다.
+curl -sf -b "$COOKIES" -X PUT -H 'Content-Type: application/json' -H "X-XSRF-TOKEN: $CSRF" \
+  -d '{"status":"DONE"}' "$BASE/api/entries/$ID/status" | grep -q '"DONE"' \
+  || fail "상태 전환이 실패했다"
+
+curl -sf -b "$COOKIES" -X POST -H "X-XSRF-TOKEN: $CSRF" "$BASE/api/entries/$ID/reparse" \
+  | grep -q '"원조해장촌"' || fail "재파싱이 실패했다"
 
 # 힌트는 데이터가 없으면 빈 목록을 돌려준다. 빈 컬렉션 직렬화 경로를 함께 검증한다.
 curl -sf -b "$COOKIES" "$BASE/api/hints" | grep -q '"categories"' || fail "힌트 조회가 실패했다"
