@@ -19,6 +19,14 @@ data class ParsedLine(
     val headcount: Int?,
     val tags: List<String>,
     val uncertain: Boolean,
+
+    /**
+     * 품목으로 보기 어려운 자유 서술.
+     *
+     * 여러 토큰이 뭉쳐 있으면 품목명이 아니라 설명이므로 여기로 흘려보낸다. 원문은 그대로
+     * 보존되지만, 목록에 쓸모없는 품목이 쌓이는 것을 막는다.
+     */
+    val memo: String?,
 )
 
 /** 파싱된 품목 하나. */

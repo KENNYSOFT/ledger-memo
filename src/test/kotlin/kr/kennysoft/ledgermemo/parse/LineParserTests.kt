@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test
 import java.time.LocalDate
 import java.time.LocalTime
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -183,6 +184,131 @@ class LineParserTests {
 
         // then
         assertEquals(today, result.occurredOn)
+    }
+
+    @Test
+    fun `총 N 은 품목이 아니라 합계다`() {
+        // given — 실제 임포트에서 "총"이 품목으로 잡혀 합계가 이중 계산됐다
+        val text = "황태해장국 1.2 스팸과계란후라이 1.4 소주 0.4 총 3.0"
+
+        // when
+        val result = parse(text)
+
+        // then — 품목 합(30,000)과 같지만 "총" 값을 그대로 쓴다
+        assertEquals(30_000, result.totalAmount)
+        assertTrue(result.items.none { it.name == "총" })
+    }
+
+    @Test
+    fun `총 값이 품목 합과 달라도 총을 신뢰한다`() {
+        // given — 품목을 다 적지 않은 경우 (실제 사례: 이가네양꼬치)
+        val text = "등심꼬치 2.3 마늘 0.3 총 9.6"
+
+        // when / then — 2.6만이 아니라 9.6만
+        assertEquals(96_000, parse(text).totalAmount)
+    }
+
+    @Test
+    fun `k 표기는 천원 단위다`() {
+        assertEquals(8_000, parse("맥주 8k").totalAmount)
+        assertEquals(36_000, parse("숙성 통삼겹살 36k").totalAmount)
+        assertEquals(79_000, parse("초연 세트 79k").totalAmount)
+        assertEquals(1_500, parse("공기밥 1.5k").totalAmount)
+    }
+
+    @Test
+    fun `곱셈 기호가 수량과 떨어져 있어도 인식한다`() {
+        // when — 실제 사례: "맥주 × 2 8k"
+        val result = parse("맥주 × 2 8k")
+
+        // then
+        val item = result.items.single()
+        assertEquals("맥주", item.name)
+        assertEquals(2, item.qty)
+        assertEquals(8_000, item.amount)
+    }
+
+    @Test
+    fun `소수점 단가에 수량을 곱한다`() {
+        // when — 실제 사례: "수원왕갈비 3.1x4" (3.1만원 x 4)
+        val result = parse("청기와타운 수원왕갈비 3.1x4")
+
+        // then
+        assertEquals("청기와타운", result.place)
+        val item = result.items.single()
+        assertEquals(31_000, item.unitPrice)
+        assertEquals(4, item.qty)
+        assertEquals(124_000, item.amount)
+    }
+
+    @Test
+    fun `쉼표는 항목 구분자로 본다`() {
+        // when — 실제 사례: "콘칩 2.5, 테라 5.5x3"
+        val result = parse("콘칩 2.5, 테라 5.5x3")
+
+        // then
+        assertEquals(2, result.items.size)
+        assertEquals("콘칩", result.items[0].name)
+        assertEquals(25_000, result.items[0].amount)
+        assertEquals("테라", result.items[1].name)
+        assertEquals(165_000, result.items[1].amount)
+    }
+
+    @Test
+    fun `금액 뒤에 남은 토큰을 장소로 만들지 않는다`() {
+        // given — 사전에 없는 이름이 금액 뒤에 온 경우.
+        // 실제 임포트에서 "제로슈가라거 4.9 나" 의 장소가 "나" 로 잡혔다.
+        val result = parse("제로슈가라거 4.9 나")
+
+        // then — 장소는 비어 있어야 한다
+        assertNull(result.place)
+        assertEquals("제로슈가라거", result.items[0].name)
+    }
+
+    @Test
+    fun `여러 토큰이 뭉친 서술은 품목이 아니라 메모로 보낸다`() {
+        // given — 실제 사례: 파싱할 수 없는 자유 서술
+        val text = "티머니 한번에 적립된 듯한데 내역 확인이 안됨"
+
+        // when
+        val result = parse(text)
+
+        // then
+        assertEquals("티머니", result.place)
+        assertTrue(result.items.isEmpty())
+        assertEquals("한번에 적립된 듯한데 내역 확인이 안됨", result.memo)
+    }
+
+    @Test
+    fun `짧은 꼬리 토큰은 그대로 품목으로 남긴다`() {
+        // when — 메모로 보낼 만큼 길지 않다
+        val result = parse("윤 노랑통닭 세가지맛")
+
+        // then
+        assertEquals("윤", result.place)
+        assertEquals("노랑통닭 세가지맛", result.items.single().name)
+        assertNull(result.memo)
+    }
+
+    @Test
+    fun `원 단위를 붙여 적은 금액도 인식한다`() {
+        // 실제 사례: "돈연 124000원 추정"
+        assertEquals(124_000, parse("돈연 124000원").totalAmount)
+        // "만원"이 붙은 것은 만원 단위로 먼저 잡는다
+        assertEquals(30_000, parse("선물 3만원").totalAmount)
+    }
+
+    @Test
+    fun `날짜나 시각 유무로 하위 항목을 가른다`() {
+        // 일괄 임포트에서 독립 기록과 하위 항목을 가르는 기준이다
+        assertTrue(parser.hasDateOrTime("6/28 18:30 돈연 124000원 추정"))
+        assertTrue(parser.hasDateOrTime("22:54 42900 대화료"))
+        assertTrue(parser.hasDateOrTime("6/15 브롱스"))
+
+        // Keep 에서 상하관계로 적힌 하위 항목에는 날짜도 시각도 없다
+        assertFalse(parser.hasDateOrTime("맥주 × 2 8k"))
+        assertFalse(parser.hasDateOrTime("골든 에일 4.9"))
+        assertFalse(parser.hasDateOrTime("공기밥 1k"))
     }
 
     @Test
