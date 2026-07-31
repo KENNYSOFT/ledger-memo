@@ -84,6 +84,15 @@ data class EntryPatchRequest(
     val uncertain: Boolean? = null,
     /** 지정하면 품목을 통째로 교체한다. */
     val items: List<ItemRequest>? = null,
+    /** 지정하면 태그를 통째로 교체한다. 빈 배열이면 모두 뗀다. */
+    val tags: List<String>? = null,
+)
+
+/** 자유 입력 필드의 자동완성 후보. 지금까지의 입력이 그대로 사전이 된다. */
+data class HintsResponse(
+    val categories: List<String>,
+    val payments: List<String>,
+    val tags: List<String>,
 )
 
 data class ItemRequest(

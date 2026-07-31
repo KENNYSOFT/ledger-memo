@@ -8,6 +8,7 @@ import kr.kennysoft.ledgermemo.person.EntryPersonRole
 import kr.kennysoft.ledgermemo.person.Person
 import kr.kennysoft.ledgermemo.person.PersonRepository
 import org.springframework.data.domain.Page
+import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Pageable
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -98,7 +99,22 @@ class EntryService(
                 entry.totalAmount = if (amounts.isEmpty()) null else amounts.sum()
             }
         }
+        request.tags?.let { names ->
+            val cleaned = names.map { it.trim().removePrefix("#") }.filter { it.isNotEmpty() }.distinct()
+            entry.tags.clear()
+            entry.tags += findOrCreateTags(cleaned)
+        }
         return entry
+    }
+
+    /** 자유 입력 필드의 자동완성 후보. 후보가 너무 많으면 고르기 어려워 상한을 둔다. */
+    fun hints(): HintsResponse {
+        val limit = PageRequest.of(0, HINT_LIMIT)
+        return HintsResponse(
+            categories = ArrayList(entryRepository.findCategoryHints(limit)),
+            payments = ArrayList(entryRepository.findPaymentHints(limit)),
+            tags = ArrayList(entryRepository.findTagNames(limit)),
+        )
     }
 
     /**
@@ -198,4 +214,8 @@ class EntryService(
     @Transactional
     fun createPerson(name: String, aliases: String?): Person =
         personRepository.findByName(name) ?: personRepository.save(Person(name, aliases))
+
+    private companion object {
+        const val HINT_LIMIT = 30
+    }
 }

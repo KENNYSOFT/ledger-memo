@@ -67,4 +67,39 @@ interface EntryRepository : JpaRepository<Entry, Long> {
 
     /** 작성 화면의 "최근 저장" 목록. */
     fun findTop3ByOrderByCreatedAtDesc(): List<Entry>
+
+    /**
+     * 이미 쓴 카테고리 값을 많이 쓴 순서로. 상세 화면 자동완성에 쓴다.
+     *
+     * 마스터 테이블 없이 문자열로 두었으므로(DESIGN.md 3.2) 지금까지의 입력이 곧 사전이다.
+     */
+    @Query(
+        """
+        SELECT e.categoryHint FROM Entry e
+        WHERE e.categoryHint IS NOT NULL AND e.categoryHint <> ''
+        GROUP BY e.categoryHint
+        ORDER BY COUNT(e) DESC, e.categoryHint ASC
+        """,
+    )
+    fun findCategoryHints(pageable: Pageable): List<String>
+
+    @Query(
+        """
+        SELECT e.paymentHint FROM Entry e
+        WHERE e.paymentHint IS NOT NULL AND e.paymentHint <> ''
+        GROUP BY e.paymentHint
+        ORDER BY COUNT(e) DESC, e.paymentHint ASC
+        """,
+    )
+    fun findPaymentHints(pageable: Pageable): List<String>
+
+    /** 실제로 쓰인 태그만 많이 쓴 순서로. 안 쓰는 태그가 목록을 채우지 않게 한다. */
+    @Query(
+        """
+        SELECT t.name FROM Entry e JOIN e.tags t
+        GROUP BY t.name
+        ORDER BY COUNT(e) DESC, t.name ASC
+        """,
+    )
+    fun findTagNames(pageable: Pageable): List<String>
 }

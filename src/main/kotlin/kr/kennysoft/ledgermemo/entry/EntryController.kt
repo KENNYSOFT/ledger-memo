@@ -59,6 +59,10 @@ class EntryController(
     @GetMapping("/api/entries/recent")
     fun recent(): List<EntrySummaryResponse> = entryService.recent().map { EntrySummaryResponse.from(it) }
 
+    /** 카테고리/결제수단/태그 자동완성 후보. */
+    @GetMapping("/api/hints")
+    fun hints(): HintsResponse = entryService.hints()
+
     @GetMapping("/api/entries/{id}")
     fun get(@PathVariable id: Long): EntryDetailResponse = EntryDetailResponse.from(entryService.get(id))
 
