@@ -343,6 +343,15 @@ A1 단일 호스트, **Podman** 컨테이너 2개. **Compose 도 Quadlet 도 쓰
   쓰려면 native 를 musl static 으로 빌드해야 하는데 불필요한 복잡성이다.
 - **MySQL 은 8.4 LTS.** 9.x 는 innovation 릴리스로 분기마다 EOL 되어 업그레이드가 강제된다.
 - 공식 `mysql` 이미지는 arm64 를 지원한다.
+- 🚨 **Kotlin 의 빈 컬렉션 싱글톤이 native 에서 Jackson 직렬화를 깨뜨린다.** `sorted()` /
+  `distinct()` / `toList()` 는 결과가 비면 `kotlin.collections.EmptyList` 를 돌려주는데,
+  이는 Kotlin 내부 object 라서 native image 에 메타데이터가 없으면
+  `KotlinReflectionInternalError: Unresolved class` 로 응답 직렬화가 실패한다.
+  `KotlinCollectionsRuntimeHints` 로 등록하고, 응답 DTO 에서는 `ArrayList(...)` 로 감싸
+  애초에 만들지 않는다.
+- **위 부류의 결함은 JVM 테스트로 잡히지 않는다.** JVM 에는 메타데이터가 그대로 있어 CI 가
+  전부 통과하고 native 바이너리에서만 터진다. 그래서 CI 의 native job 은 빌드만 하지 않고
+  **바이너리를 실제로 띄워 로그인·저장까지 왕복**한다 (7.6).
 
 ### 7.2 Apache httpd VirtualHost
 

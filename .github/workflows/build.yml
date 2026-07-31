@@ -57,8 +57,22 @@ jobs:
           retention-days: 7
 
   native:
-    name: native image 빌드 (arm64)
+    name: native image 빌드 + 스모크 테스트 (arm64)
     runs-on: ubuntu-24.04-arm
+    # 스모크 테스트가 실제로 앱을 띄우므로 DB 가 필요하다.
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: ledger_memo
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd "mysqladmin ping -h 127.0.0.1 -uroot -proot"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 15
     steps:
       - uses: actions/checkout@v7
       - uses: graalvm/setup-graalvm@v1
@@ -73,6 +87,10 @@ jobs:
           ls -la build/native/nativeCompile/
           file build/native/nativeCompile/ledger-memo
           du -h build/native/nativeCompile/ledger-memo
+      # JVM 테스트로는 native 전용 결함(Kotlin 메타데이터 누락 등)이 잡히지 않는다.
+      # 바이너리를 실제로 띄워 로그인·저장·조회까지 왕복한다 (DESIGN.md 7.1).
+      - name: 스모크 테스트
+        run: ./scripts/smoke-test.sh
       - uses: actions/upload-artifact@v4
         with:
           name: ledger-memo-arm64
