@@ -255,9 +255,32 @@ podman run -d --name ledger-memo --network=host --restart=always \
 
 ## 백업
 
-DB 와 첨부 디렉토리 둘 다 대상이다.
+DB 덤프와 첨부 디렉토리를 한 파일로 묶는 스크립트가 있다
+([scripts/backup.sh](./scripts/backup.sh)). 비밀번호를 명령줄에 노출하지 않고 컨테이너
+환경변수를 그대로 쓰며, 덤프가 비면 실패로 끝내 깨진 백업을 남기지 않는다.
 
 ```sh
-podman exec ledger-mysql sh -c 'mysqldump -u root -p"$MYSQL_ROOT_PASSWORD" ledger_memo' > ledger_memo.sql
-tar czf ledger-memo-att.tar.gz -C ~/ledger-memo att
+./scripts/backup.sh
+```
+
+기본값은 `~/backup/ledger-memo` 에 보관하고 30일이 지난 파일을 지운다. 환경변수로 바꾼다.
+
+| 변수 | 기본값 |
+|---|---|
+| `LEDGER_BACKUP_DIR` | `~/backup/ledger-memo` |
+| `LEDGER_ATTACHMENT_DIR` | `~/ledger-memo/att` |
+| `LEDGER_BACKUP_KEEP_DAYS` | `30` |
+
+매일 새벽 4시에 돌리려면 (rootless podman 이므로 사용자 crontab 에 등록한다):
+
+```sh
+(crontab -l 2>/dev/null; echo "0 4 * * * $HOME/ledger-memo/scripts/backup.sh >> $HOME/backup/ledger-memo.log 2>&1") | crontab -
+```
+
+복원은 아카이브를 풀어 `ledger_memo.sql` 을 적용하고 `attachments.tar.gz` 를 첨부 경로에
+되돌린다.
+
+```sh
+tar xzf ledger-memo-<타임스탬프>.tar.gz
+podman exec -i ledger-mysql sh -c 'exec mysql -u root -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE"' < ledger_memo.sql
 ```
