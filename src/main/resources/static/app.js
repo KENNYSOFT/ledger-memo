@@ -429,8 +429,19 @@ function renderDetail() {
       <div class="field"><label>인원</label><input id="d-headcount" inputmode="numeric" value="${entry.headcount ?? ''}"></div>
     </div>
     <div class="grid2">
-      <div class="field"><label>카테고리</label><input id="d-category" value="${escapeHtml(entry.categoryHint || '')}" placeholder="식비, 교통 등"></div>
-      <div class="field"><label>결제수단</label><input id="d-payment" value="${escapeHtml(entry.paymentHint || '')}" placeholder="카드, 현금 등"></div>
+      <div class="field">
+        <label>카테고리</label>
+        <input id="d-category" list="dl-categories" value="${escapeHtml(entry.categoryHint || '')}" placeholder="식비, 교통 등">
+      </div>
+      <div class="field">
+        <label>결제수단</label>
+        <input id="d-payment" list="dl-payments" value="${escapeHtml(entry.paymentHint || '')}" placeholder="카드, 현금 등">
+      </div>
+    </div>
+    <div class="field">
+      <label>태그 (쉼표로 구분)</label>
+      <input id="d-tags" value="${escapeHtml(entry.tags.join(', '))}" placeholder="회사, 가족">
+      <div class="chips" id="d-tag-suggest"></div>
     </div>
     <div class="field"><label>메모</label><textarea id="d-memo" rows="2">${escapeHtml(entry.memo || '')}</textarea></div>
 
@@ -455,7 +466,55 @@ function renderDetail() {
     </div>`;
 
   loadPersonOptions();
+  applyHints();
   bindDetailEvents();
+}
+
+/**
+ * 자동완성 후보를 datalist 에 채운다.
+ *
+ * 지금까지 입력한 값이 그대로 사전이 된다 (카테고리/결제수단은 마스터 테이블이 없다).
+ * 상세를 열 때마다 요청하지 않고 세션 동안 한 번만 받는다.
+ */
+let hintsCache = null;
+
+async function applyHints() {
+  if (!hintsCache) {
+    try {
+      hintsCache = await api('/api/hints');
+    } catch (error) {
+      console.debug('힌트 로드 실패', error);
+      return;
+    }
+  }
+  fillDatalist('dl-categories', hintsCache.categories);
+  fillDatalist('dl-payments', hintsCache.payments);
+
+  // 태그는 쉼표로 나열하는 필드라 datalist 가 매칭되지 않는다. 탭해서 넣는 칩으로 둔다.
+  const suggest = $('d-tag-suggest');
+  if (suggest) {
+    suggest.innerHTML = hintsCache.tags
+      .map((tag) => `<span class="chip" data-tag="${escapeHtml(tag)}">#${escapeHtml(tag)}</span>`)
+      .join('');
+  }
+}
+
+function fillDatalist(id, values) {
+  const list = $(id);
+  if (!list) return;
+  list.innerHTML = values.map((value) => `<option value="${escapeHtml(value)}"></option>`).join('');
+}
+
+/** 추천 칩을 탭하면 태그 입력에 덧붙인다. 이미 있으면 무시한다. */
+function onTagSuggestClick(event) {
+  const chip = event.target.closest('[data-tag]');
+  if (!chip) return;
+
+  const input = $('d-tags');
+  const current = input.value.split(',').map((tag) => tag.trim()).filter((tag) => tag !== '');
+  if (current.includes(chip.dataset.tag)) return;
+
+  input.value = [...current, chip.dataset.tag].join(', ');
 }
 
 async function loadPersonOptions() {
@@ -485,6 +544,7 @@ function bindDetailEvents() {
   };
   $('d-save').onclick = saveDetail;
   $('d-reparse').onclick = reparseDetail;
+  $('d-tag-suggest').onclick = onTagSuggestClick;
 
   $('d-add-photo').onclick = () => $('d-photo-input').click();
   $('d-photo-input').onchange = async (event) => {
@@ -558,12 +618,15 @@ async function saveDetail() {
     headcount: numberOrNull($('d-headcount').value),
     memo: $('d-memo').value.trim(),
     items: collectItems(),
+    tags: $('d-tags').value.split(',').map((tag) => tag.trim()).filter((tag) => tag !== ''),
   };
 
   try {
     await api(`/api/entries/${detailEntry.id}`, json('PATCH', body));
     closeDetail();
     toast('저장했습니다');
+    // 새로 쓴 카테고리/태그가 다음 자동완성에 반영되도록 캐시를 버린다.
+    hintsCache = null;
     await loadList();
   } catch (error) {
     toast(`저장 실패: ${error.message}`);
