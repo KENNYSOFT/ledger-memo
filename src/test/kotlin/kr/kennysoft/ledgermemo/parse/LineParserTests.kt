@@ -312,6 +312,28 @@ class LineParserTests {
     }
 
     @Test
+    fun `시각만 있는 줄은 날짜가 없는 것으로 본다`() {
+        // 이 줄들은 위에서 날짜를 물려받아야 한다. 그러지 않으면 임포트한 당일로 저장된다.
+        assertFalse(parser.hasDate("21:41 택시 6700"))
+        assertTrue(parser.hasTime("21:41 택시 6700"))
+    }
+
+    @Test
+    fun `날짜만 적은 머리글을 알아본다`() {
+        // Keep 에서 날짜를 머리글로 적고 아래에 시각별 항목을 나열한 경우
+        assertTrue(parser.isDateOnly("6/12"))
+        assertTrue(parser.isDateOnly("6/12 (목)"))
+        assertTrue(parser.isDateOnly("6/12 목"))
+        assertTrue(parser.isDateOnly("- 6/12 -"))
+
+        // 내용이 함께 있으면 머리글이 아니라 기록이다
+        assertFalse(parser.isDateOnly("6/11 박채원결제"))
+        assertFalse(parser.isDateOnly("6/15 브롱스"))
+        assertFalse(parser.isDateOnly("21:41 택시 6700"))
+        assertFalse(parser.isDateOnly("택시 6700"))
+    }
+
+    @Test
     fun `빈 입력에도 예외를 던지지 않는다`() {
         // when
         val result = parse("   ")

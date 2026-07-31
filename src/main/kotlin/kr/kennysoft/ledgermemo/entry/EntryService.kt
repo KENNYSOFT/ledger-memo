@@ -199,9 +199,12 @@ class EntryService(
     /**
      * 여러 줄을 기록으로 만든다. Keep 에 쌓인 미완료분 이관용이다.
      *
-     * **날짜도 시각도 없는 줄은 직전 기록의 하위 항목으로 합친다.** Keep 에서 상하관계로
-     * 적어둔 주문 내역이 줄 단위로 쪼개지면 한 자리의 결제가 여러 기록이 되어, 합계도 사람도
-     * 흩어진다 (실측: 67줄을 넣었더니 13줄이 이렇게 흩어졌다).
+     * Keep 은 2단으로 적혀 있어 줄의 성격을 세 가지로 나눠 처리한다.
+     * - **날짜만 있는 줄**(`6/12`)은 기록이 아니라 머리글이다. 아래 줄들이 물려받을 날짜로만 쓴다.
+     * - **시각만 있는 줄**(`21:41 택시 6700`)은 독립된 기록이지만 날짜를 위에서 물려받는다.
+     *   물려받지 않으면 임포트한 당일로 저장되어 날짜가 통째로 틀어진다.
+     * - **날짜도 시각도 없는 줄**은 직전 기록의 하위 항목으로 합친다. 한 자리의 주문이 줄
+     *   단위로 쪼개지면 합계도 사람도 흩어진다.
      *
      * 한 줄이 실패해도 전체를 되돌리지 않는다. 수백 줄을 붙여넣었을 때 한 줄 때문에 전부
      * 날리는 편보다, 성공분을 남기고 실패한 원문을 돌려주어 손으로 처리하게 하는 편이 낫다.
@@ -211,23 +214,35 @@ class EntryService(
         val created = mutableListOf<Entry>()
         val failed = mutableListOf<FailedLine>()
         var current: Entry? = null
+        var currentDate: LocalDate? = null
 
         text.lineSequence()
             .map { it.trim() }
             .filter { it.isNotEmpty() }
             .forEach { line ->
+                if (parser.isDateOnly(line)) {
+                    currentDate = parse(line).occurredOn
+                    // 머리글은 하위 항목을 받을 기록이 아니다.
+                    current = null
+                    return@forEach
+                }
+
                 val parent = current
                 if (parent != null && !parser.hasDateOrTime(line)) {
                     runCatching { appendLine(parent, line) }
                         .onFailure { failed += FailedLine(line, it.message ?: it::class.simpleName.orEmpty()) }
-                } else {
-                    runCatching { createEntity(EntryCreateRequest(rawText = line)) }
-                        .onSuccess {
-                            created += it
-                            current = it
-                        }
-                        .onFailure { failed += FailedLine(line, it.message ?: it::class.simpleName.orEmpty()) }
+                    return@forEach
                 }
+
+                // 날짜가 적혀 있지 않으면 머리글이나 직전 기록의 날짜를 쓴다.
+                val inherited = if (parser.hasDate(line)) null else currentDate
+                runCatching { createEntity(EntryCreateRequest(rawText = line, occurredOn = inherited)) }
+                    .onSuccess {
+                        created += it
+                        current = it
+                        currentDate = it.occurredOn
+                    }
+                    .onFailure { failed += FailedLine(line, it.message ?: it::class.simpleName.orEmpty()) }
             }
 
         // 방금 만든 기록이라 첨부는 아직 없다.

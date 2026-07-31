@@ -19,13 +19,30 @@ import java.time.LocalTime
 class LineParser {
 
     /**
-     * 줄에 날짜나 시각이 적혀 있는지.
+     * 줄에 날짜/시각이 적혀 있는지.
      *
-     * 일괄 임포트에서 "이 줄이 독립된 기록인가, 직전 기록의 하위 항목인가"를 가르는 데 쓴다.
-     * Keep 에서 상하관계로 적어둔 하위 항목에는 날짜/시각이 없다.
+     * 일괄 임포트가 줄의 성격을 가르는 데 쓴다. Keep 의 2단 구조에서
+     * - 날짜가 있으면 독립된 기록
+     * - 시각만 있으면 독립된 기록이지만 날짜는 위에서 물려받아야 한다
+     * - 둘 다 없으면 직전 기록의 하위 항목
      */
-    fun hasDateOrTime(line: String): Boolean =
-        DATE.containsMatchIn(line) || TIME.containsMatchIn(line)
+    fun hasDate(line: String): Boolean = DATE.containsMatchIn(line)
+
+    fun hasTime(line: String): Boolean = TIME.containsMatchIn(line)
+
+    fun hasDateOrTime(line: String): Boolean = hasDate(line) || hasTime(line)
+
+    /**
+     * 날짜만 적어둔 줄인지 (`6/12`, `6/12 (목)`).
+     *
+     * Keep 에서 날짜를 머리글로 적고 그 아래에 시각별 항목을 나열한 경우다. 이런 줄은
+     * 기록이 아니라 아래 줄들이 물려받을 날짜이므로 기록으로 만들지 않는다.
+     */
+    fun isDateOnly(line: String): Boolean {
+        if (!hasDate(line)) return false
+        // 날짜와 요일 표기를 걷어내고 남는 것이 없으면 머리글이다.
+        return DATE.replace(line, "").replace(DATE_HEADER_NOISE, "").isEmpty()
+    }
 
     fun parse(
         text: String,
@@ -288,6 +305,9 @@ class LineParser {
 
         /** 뒤에 오는 금액이 합계임을 알리는 표기. */
         val TOTAL_MARKERS = setOf("총", "합계", "총액")
+
+        /** 날짜 머리글에 함께 붙는 요일/괄호/구분 기호. */
+        val DATE_HEADER_NOISE = Regex("""[()\[\]<>~\-,.\s월화수목금토일요]""")
 
         /** 수량과 떨어져 적힌 곱셈 기호. */
         val MULTIPLY_MARKERS = setOf("x", "X", "*", "×")
