@@ -240,9 +240,19 @@ CREATE TABLE ledger_memo.attachment (
 | `DELETE` | `/api/entries/{id}` | 삭제 |
 | `POST` | `/api/entries/{id}/attachments` | 사진 업로드 (multipart) |
 | `GET` | `/api/attachments/{id}` | 원본. `?thumb=true` 로 썸네일 |
+| `POST` | `/api/entries/bulk` | 여러 줄 일괄 등록 (Keep 미완료분 이관) |
 | `GET` | `/api/persons` · `POST` | 사람 마스터 |
 | `GET` | `/api/settlements` | 사람별 미정산 합계 |
+| `POST` | `/api/entries/{id}/persons` | 거래에 사람 추가 |
+| `PATCH` | `/api/entry-persons/{id}` | 역할/분담액/정산 부분 수정 |
 | `PUT` | `/api/entry-persons/{id}/settled` | 정산 완료 표시 |
+| `DELETE` | `/api/entry-persons/{id}` | 거래에서 사람 제거 |
+
+일괄 등록은 **줄 단위로 독립 처리**한다. 한 줄이 실패해도 나머지를 저장하고 실패한 원문을
+돌려준다. 수백 줄을 붙여넣었을 때 한 줄 때문에 전부 되돌리는 편이 더 나쁘다.
+
+`PATCH /api/entries/{id}` 의 문자열 필드는 **빈 문자열을 "지움"으로 받는다.** 필드를 보내지
+않은 것(null)과 화면에서 비운 것("")을 구분해야 상세 화면에서 장소나 메모를 지울 수 있다.
 
 멀티파트는 힙을 거치지 않고 디스크로 직행시킨다:
 `spring.servlet.multipart.file-size-threshold=0`, `max-file-size=8MB`.
@@ -252,9 +262,13 @@ CREATE TABLE ledger_memo.attachment (
 | 화면 | 내용 |
 |---|---|
 | **작성** (기본) | 한 줄 입력 + 촬영 버튼 + 파싱 칩 + 저장. 최근 저장 3건. 사용의 90% 지점 |
-| **목록** | `OPEN` 기본, 날짜 그룹핑. 탭으로 완료 처리. 검색(장소/품목/사람/금액), 날짜 범위 필터 |
-| **상세/보강** | 품목 편집, 카테고리/결제수단/태그 지정, 사진 추가 |
+| **목록** | `OPEN` 기본, 날짜 그룹핑. 탭으로 완료 처리. 검색(장소/품목/금액) |
+| **상세/보강** | 품목 편집, 카테고리/결제수단/메모, 사진 추가, 사람·정산, 원문 재파싱 |
 | **정산** | 사람별 미정산 합계. 분개장 채권/채무 입력 시 참조 |
+| **임포트** | 여러 줄 붙여넣기 → 일괄 등록. 실패한 줄만 입력창에 남는다 |
+
+상세는 목록/최근 카드를 탭하면 열리는 바텀 시트다. 탭을 늘리지 않고 목록 흐름에서 바로
+보강할 수 있게 했다.
 
 프론트는 빌드 없는 단일 HTML + vanilla JS. 화면 4개에 번들러를 도입할 이유가 없다.
 PWA manifest 로 홈 화면에 설치하고, 오프라인 입력은 `localStorage` 큐에 넣어 온라인 복귀 시
@@ -512,11 +526,12 @@ podman run -d --name ledger-memo --network=host --restart=always \
 2. ~~**1단계 (뼈대)**~~ — 완료. 스키마 + `entries` API + 한 줄 파서 + 사진 촬영 업로드 +
    작성/목록 화면. 여기까지가 Keep 대체.
 3. ~~**2단계 (운영)**~~ — 완료. CI/CD(GHCR) + `podman run` 2개 + `podman-restart.service` +
-   httpd VirtualHost + 인증. 백업은 수동 명령만 있고 자동화는 남았다.
-4. **3단계 (편의)** — 정산 뷰 화면, 상세/보강 화면, **Keep 기존 미완료분 일괄 임포트**
-   (텍스트 붙여넣기 → 일괄 파싱). 지금 밀린 것부터 이 서비스에서 처리할 수 있게 된다.
-   API 는 `/api/settlements` 까지 있고 화면이 없다.
-5. **4단계** — 상세 보강 화면 고도화 (카테고리/결제수단 자동완성 등).
+   httpd VirtualHost + 인증 + 백업 스크립트(cron).
+4. ~~**3단계 (편의)**~~ — 완료. 정산 뷰, 상세/보강 화면, 검색/필터, PWA 오프라인 큐,
+   Keep 미완료분 일괄 임포트.
+5. **4단계 (남음)** — 상세 보강 화면 고도화. 카테고리/결제수단은 지금 자유 입력이라
+   같은 값을 매번 새로 타이핑해야 한다. 기존 입력값 기반 자동완성이 다음 후보다.
+   태그도 파서가 붙이기만 하고 화면에서 편집할 수단이 없다.
 
 ## 9. 스코프 밖 (의도적 제외)
 
