@@ -115,12 +115,62 @@
   #queued { font-size: 12px; color: var(--warn); margin-top: 6px; }
   .thumbs { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
   .thumbs img { width: 64px; height: 64px; object-fit: cover; border-radius: 8px; border: 1px solid var(--line); }
+
+  header button { font-size: 14px; }
+  .hint { color: var(--muted); font-size: 13px; line-height: 1.6; margin: 0 0 10px; }
+  textarea#import-text {
+    width: 100%; padding: 12px; font-size: 15px; line-height: 1.5;
+    border: 1px solid var(--line); border-radius: 10px;
+    background: var(--card); color: var(--text); resize: vertical;
+  }
+  #import-result { margin-top: 12px; }
+  .failed { border-color: var(--danger); }
+  .failed .place { color: var(--danger); }
+
+  /* 상세 시트 */
+  .sheet {
+    position: fixed; inset: 0; z-index: 30;
+    background: rgba(0, 0, 0, .45);
+    display: flex; align-items: flex-end; justify-content: center;
+  }
+  .sheet[hidden] { display: none; }
+  .sheet-inner {
+    background: var(--bg); width: 100%; max-width: 720px;
+    max-height: 92vh; overflow-y: auto;
+    border-radius: 14px 14px 0 0; padding: 12px 12px calc(20px + env(safe-area-inset-bottom));
+  }
+  .sheet-head {
+    position: sticky; top: 0; background: var(--bg);
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 4px 0 10px; margin-bottom: 4px; border-bottom: 1px solid var(--line);
+  }
+  button.icon { background: none; border: none; color: var(--accent); font-size: 15px; padding: 6px; }
+
+  .field { margin-bottom: 10px; }
+  .field label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+  .field input, .field select, .field textarea {
+    width: 100%; padding: 10px; font-size: 15px;
+    border: 1px solid var(--line); border-radius: 8px;
+    background: var(--card); color: var(--text);
+  }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .item-row { display: grid; grid-template-columns: 1fr 56px 96px 32px; gap: 6px; margin-bottom: 6px; }
+  .item-row input { padding: 9px; font-size: 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); color: var(--text); width: 100%; }
+  .item-row button { border: none; background: none; color: var(--danger); font-size: 18px; }
+  .person-row { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; flex-wrap: wrap; }
+  .person-row .name { flex: 1; font-weight: 600; }
+  .person-row select, .person-row input { padding: 8px; font-size: 13px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); color: var(--text); }
+  .person-row input.share { width: 100px; }
+  .settle-card { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+  .settle-card .amount { font-size: 17px; }
 </style>
 </head>
 <body>
 <header>
   <button id="tab-write" aria-selected="true">작성</button>
   <button id="tab-list" aria-selected="false">목록</button>
+  <button id="tab-settle" aria-selected="false">정산</button>
+  <button id="tab-import" aria-selected="false">임포트</button>
 </header>
 
 <main>
@@ -152,7 +202,33 @@
     </div>
     <div id="list"></div>
   </section>
+
+  <section id="view-settle" hidden>
+    <div id="settlements"></div>
+  </section>
+
+  <section id="view-import" hidden>
+    <p class="hint">
+      Keep 등에 쌓인 미완료 메모를 한 줄에 하나씩 붙여넣으면 각각 기록으로 만듭니다.
+      실패한 줄은 원문 그대로 돌려주니 손으로 처리하면 됩니다.
+    </p>
+    <textarea id="import-text" rows="12" placeholder="5/28 원조해장촌 2인세트 4.5 소주2 1.0&#10;5/29 택시 8100&#10;..."></textarea>
+    <div class="row">
+      <button class="primary" id="btn-import">일괄 등록</button>
+    </div>
+    <div id="import-result"></div>
+  </section>
 </main>
+
+<div id="detail" class="sheet" hidden>
+  <div class="sheet-inner">
+    <div class="sheet-head">
+      <strong id="detail-title">상세</strong>
+      <button id="detail-close" class="icon">닫기</button>
+    </div>
+    <div id="detail-body"></div>
+  </div>
+</div>
 
 <div id="toast"></div>
 <script src="/app.js"></script>
