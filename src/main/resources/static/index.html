@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1f2937">
+<title>가계부 메모</title>
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/icons/icon.svg">
+<style>
+  :root {
+    --bg: #f7f7f8;
+    --card: #ffffff;
+    --text: #1f2937;
+    --muted: #6b7280;
+    --line: #e5e7eb;
+    --accent: #2563eb;
+    --danger: #dc2626;
+    --warn: #b45309;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #111317;
+      --card: #1b1e24;
+      --text: #e5e7eb;
+      --muted: #9ca3af;
+      --line: #2b3038;
+      --accent: #60a5fa;
+      --danger: #f87171;
+      --warn: #fbbf24;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans KR", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  header {
+    position: sticky; top: 0; z-index: 10;
+    display: flex; gap: 4px;
+    background: var(--card);
+    border-bottom: 1px solid var(--line);
+    padding: 8px 8px 0;
+    padding-top: calc(8px + env(safe-area-inset-top));
+  }
+  header button {
+    flex: 1; padding: 10px 4px;
+    background: none; border: none; border-bottom: 2px solid transparent;
+    color: var(--muted); font-size: 15px; font-weight: 600;
+  }
+  header button[aria-selected="true"] { color: var(--accent); border-bottom-color: var(--accent); }
+  main { padding: 12px; max-width: 720px; margin: 0 auto; }
+  section[hidden] { display: none; }
+
+  textarea#line {
+    width: 100%; min-height: 76px; padding: 12px;
+    font-size: 17px; line-height: 1.5;
+    border: 1px solid var(--line); border-radius: 10px;
+    background: var(--card); color: var(--text); resize: vertical;
+  }
+  .row { display: flex; gap: 8px; margin-top: 8px; }
+  .row > * { flex: 1; }
+  button.primary {
+    padding: 13px; font-size: 16px; font-weight: 600;
+    background: var(--accent); color: #fff; border: none; border-radius: 10px;
+  }
+  button.ghost {
+    padding: 13px; font-size: 16px;
+    background: var(--card); color: var(--text);
+    border: 1px solid var(--line); border-radius: 10px;
+  }
+  button:disabled { opacity: .5; }
+
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; min-height: 8px; }
+  .chip {
+    font-size: 13px; padding: 5px 10px; border-radius: 999px;
+    background: var(--card); border: 1px solid var(--line); color: var(--muted);
+  }
+  .chip.amount { color: var(--accent); border-color: var(--accent); font-weight: 600; }
+  .chip.warn { color: var(--warn); border-color: var(--warn); }
+
+  .card {
+    background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+    padding: 12px; margin-bottom: 8px;
+  }
+  .card .top { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+  .card .place { font-weight: 600; }
+  .card .amount { font-variant-numeric: tabular-nums; font-weight: 600; }
+  .card .raw { color: var(--muted); font-size: 13px; margin-top: 4px; word-break: break-all; }
+  .card .meta { color: var(--muted); font-size: 12px; margin-top: 6px; display: flex; gap: 8px; }
+  .card .actions { display: flex; gap: 6px; margin-top: 10px; }
+  .card .actions button { flex: 1; padding: 8px; font-size: 13px; border-radius: 8px; border: 1px solid var(--line); background: none; color: var(--text); }
+  .card .actions button.done { color: var(--accent); border-color: var(--accent); }
+  .card .actions button.del { color: var(--danger); border-color: var(--danger); }
+  .card img.thumb { max-width: 100%; border-radius: 8px; margin-top: 8px; }
+
+  h2.date { font-size: 13px; color: var(--muted); margin: 16px 0 6px; font-weight: 600; }
+  .empty { color: var(--muted); text-align: center; padding: 32px 0; }
+  .filters { display: flex; gap: 6px; margin-bottom: 10px; }
+  .filters input, .filters select {
+    padding: 9px; font-size: 14px; border: 1px solid var(--line); border-radius: 8px;
+    background: var(--card); color: var(--text); min-width: 0;
+  }
+  .filters input { flex: 1; }
+  #toast {
+    position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%);
+    background: #111; color: #fff; padding: 10px 16px; border-radius: 999px;
+    font-size: 14px; opacity: 0; transition: opacity .2s; pointer-events: none; z-index: 20;
+  }
+  #toast.show { opacity: .92; }
+  #queued { font-size: 12px; color: var(--warn); margin-top: 6px; }
+  .thumbs { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+  .thumbs img { width: 64px; height: 64px; object-fit: cover; border-radius: 8px; border: 1px solid var(--line); }
+</style>
+</head>
+<body>
+<header>
+  <button id="tab-write" aria-selected="true">작성</button>
+  <button id="tab-list" aria-selected="false">목록</button>
+</header>
+
+<main>
+  <section id="view-write">
+    <textarea id="line" rows="3" enterkeyhint="done"
+              placeholder="원조해장촌 2인세트 4.5 소주2 1.0 맥주3 1.5"></textarea>
+    <div class="chips" id="chips"></div>
+    <div id="queued" hidden></div>
+
+    <div class="row">
+      <button class="ghost" id="btn-photo">사진</button>
+      <button class="primary" id="btn-save">저장</button>
+    </div>
+    <input type="file" id="photo" accept="image/*" capture="environment" multiple hidden>
+    <div class="thumbs" id="pending-thumbs"></div>
+
+    <h2 class="date">최근 저장</h2>
+    <div id="recent"></div>
+  </section>
+
+  <section id="view-list" hidden>
+    <div class="filters">
+      <input type="search" id="q" placeholder="장소 / 품목 / 금액 검색">
+      <select id="status">
+        <option value="OPEN">미완료</option>
+        <option value="DONE">완료</option>
+        <option value="">전체</option>
+      </select>
+    </div>
+    <div id="list"></div>
+  </section>
+</main>
+
+<div id="toast"></div>
+<script src="/app.js"></script>
+</body>
+</html>
