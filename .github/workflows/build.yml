@@ -1,10 +1,18 @@
 name: build
 
+# 문서만 바뀐 push 는 빌드하지 않는다. native 빌드가 수 분씩 걸려서 md 한 줄 고칠 때마다
+# 도는 것이 낭비다. 문서 외 파일이 하나라도 섞이면 정상적으로 전체가 돈다.
 on:
   push:
     branches: [main]
+    paths-ignore: &docs
+      - '**.md'
+      - 'LICENSE'
+      - '.gitignore'
+      - '.editorconfig'
   pull_request:
     branches: [main]
+    paths-ignore: *docs
 
 # A1 이 aarch64 이므로 ARM runner 를 쓴다. native image 는 크로스 컴파일이 불가능해
 # x86 runner 산출물은 서버에서 실행되지 않는다 (DESIGN.md 7.1).
