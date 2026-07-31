@@ -44,11 +44,18 @@ class LineParser {
         return DATE.replace(line, "").replace(DATE_HEADER_NOISE, "").isEmpty()
     }
 
+    /**
+     * 한 줄을 파싱한다.
+     *
+     * 🚨 **시각이 적혀 있지 않으면 [ParsedLine.occurredAt] 은 null 이다.** 파서는 사실만
+     * 돌려주고 "지금"으로 채우지 않는다. 과거 메모를 임포트할 때 실행 시각이 박히면 하루치
+     * 기록이 전부 같은 엉뚱한 시각을 갖게 된다(실측: 13건이 임포트 시각 23:08 로 저장됐다).
+     * 실시간 작성에서 현재 시각을 넣는 것은 호출자 책임이다.
+     */
     fun parse(
         text: String,
         dictionary: PersonDictionary = PersonDictionary.EMPTY,
         today: LocalDate,
-        now: LocalTime,
     ): ParsedLine {
         // 물음표는 불확실 표시일 뿐 값의 일부가 아니므로 떼어내고 판단한다.
         // 쉼표는 항목 구분자로 쓰이므로(`콘칩 2.5, 테라 5.5x3`) 공백과 같이 취급한다.
@@ -64,7 +71,7 @@ class LineParser {
         val amounts = state.items.mapNotNull { it.amount }
         return ParsedLine(
             occurredOn = state.date ?: today,
-            occurredAt = state.time ?: now.withSecond(0).withNano(0),
+            occurredAt = state.time,
             place = state.place,
             items = state.items,
             // 원문에 "총 N" 이 있으면 그것이 사용자가 적어둔 합계다. 품목 합보다 신뢰한다

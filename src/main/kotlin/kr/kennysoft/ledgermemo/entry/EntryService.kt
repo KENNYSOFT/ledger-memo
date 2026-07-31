@@ -41,7 +41,7 @@ class EntryService(
 ) {
 
     fun parse(text: String?): ParsedLine =
-        parser.parse(text.orEmpty(), dictionary(), LocalDate.now(clock), LocalTime.now(clock))
+        parser.parse(text.orEmpty(), dictionary(), LocalDate.now(clock))
 
     fun search(
         status: EntryStatus?,
@@ -87,12 +87,15 @@ class EntryService(
      */
     @Transactional
     fun create(request: EntryCreateRequest): EntryDetailResponse =
-        EntryDetailResponse.from(createEntity(request))
+        EntryDetailResponse.from(createEntity(request, fillMissingTime = true))
 
     /**
      * 저장한 엔티티를 그대로 돌려준다. 일괄 임포트처럼 같은 트랜잭션에서 이어 쓰는 경로용이다.
+     *
+     * [fillMissingTime] 은 원문에 시각이 없을 때 현재 시각을 넣을지다. 실시간 작성에서는
+     * "지금"이 맞지만, 과거 메모를 임포트할 때는 실행 시각이 박혀 하루치가 같은 시각이 된다.
      */
-    private fun createEntity(request: EntryCreateRequest): Entry {
+    private fun createEntity(request: EntryCreateRequest, fillMissingTime: Boolean): Entry {
         if (request.rawText.isNullOrBlank() && !request.attachmentOnly) {
             throw ResponseStatusException(HttpStatus.BAD_REQUEST, "원문과 첨부 중 하나는 있어야 한다")
         }
@@ -100,7 +103,9 @@ class EntryService(
         val parsed = parse(request.rawText)
         val entry = Entry(
             occurredOn = request.occurredOn ?: parsed.occurredOn,
-            occurredAt = request.occurredAt ?: parsed.occurredAt,
+            occurredAt = request.occurredAt
+                ?: parsed.occurredAt
+                ?: if (fillMissingTime) LocalTime.now(clock).withSecond(0).withNano(0) else null,
             rawText = request.rawText?.takeIf { it.isNotBlank() },
             place = request.place ?: parsed.place,
             totalAmount = request.totalAmount ?: parsed.totalAmount,
@@ -170,7 +175,7 @@ class EntryService(
 
         val parsed = parse(rawText)
         entry.occurredOn = parsed.occurredOn
-        entry.occurredAt = parsed.occurredAt
+        parsed.occurredAt?.let { entry.occurredAt = it }
         entry.place = parsed.place
         entry.totalAmount = parsed.totalAmount
         entry.headcount = parsed.headcount
@@ -236,7 +241,12 @@ class EntryService(
 
                 // 날짜가 적혀 있지 않으면 머리글이나 직전 기록의 날짜를 쓴다.
                 val inherited = if (parser.hasDate(line)) null else currentDate
-                runCatching { createEntity(EntryCreateRequest(rawText = line, occurredOn = inherited)) }
+                runCatching {
+                    createEntity(
+                        EntryCreateRequest(rawText = line, occurredOn = inherited),
+                        fillMissingTime = false,
+                    )
+                }
                     .onSuccess {
                         created += it
                         current = it

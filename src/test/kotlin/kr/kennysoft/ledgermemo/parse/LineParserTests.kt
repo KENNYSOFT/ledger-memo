@@ -18,10 +18,9 @@ class LineParserTests {
 
     private val parser = LineParser()
     private val today = LocalDate.of(2026, 7, 31)
-    private val now = LocalTime.of(21, 37)
 
     private fun parse(text: String, dictionary: PersonDictionary = PersonDictionary.EMPTY) =
-        parser.parse(text, dictionary, today, now)
+        parser.parse(text, dictionary, today)
 
     @Test
     fun `DESIGN 검증 예제 1 - 2인 술자리 합계가 정합한다`() {
@@ -124,8 +123,10 @@ class LineParserTests {
 
         // 콜론이 없는 네 자리는 금액과 구분할 수 없으므로 시각이 아니다 (DESIGN.md 2.2)
         val result = parse("택시 2137")
-        assertEquals(now, result.occurredAt)
         assertEquals(2_137, result.totalAmount)
+
+        // 시각이 없으면 비워 둔다. 파서가 "지금"으로 채우면 임포트에서 실행 시각이 박힌다.
+        assertNull(result.occurredAt)
     }
 
     @Test
