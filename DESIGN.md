@@ -506,16 +506,16 @@ podman run -d --name ledger-memo --network=host --restart=always \
 
 ## 8. 구현 단계
 
-1. **Spike (선행, 반나절)** — 빈 프로젝트 → MySQL 8.4 연결 → Flyway 마이그레이션 1개 →
-   `SELECT 1` API → **Actions ARM runner 에서 native 빌드** → A1 배포 → RSS 실측.
-   Spring Boot 4.1 은 Spring Framework 7 기반이고 Jackson 3 전환 등 변경 폭이 크므로,
-   기능 개발 전에 native + Connector/J + Flyway 조합을 먼저 통과시킨다.
-2. **1단계 (뼈대)** — 스키마 + `entries` API + 한 줄 파서 + **사진 촬영 업로드** +
+1. ~~**Spike (선행, 반나절)**~~ — 완료. MySQL 8.4 연결 + Flyway + `/api/ping` +
+   ARM runner native 빌드 + A1 배포까지 통과했다. Spring Boot 4.1 은 Spring Framework 7
+   기반이고 Jackson 3 전환 등 변경 폭이 커서, 기능 개발 전에 조합을 먼저 확인했다.
+2. ~~**1단계 (뼈대)**~~ — 완료. 스키마 + `entries` API + 한 줄 파서 + 사진 촬영 업로드 +
    작성/목록 화면. 여기까지가 Keep 대체.
-3. **2단계 (운영)** — CI/CD(GHCR) + `podman run` 2개 + `podman-restart.service` + httpd
-   VirtualHost + 인증 + 백업.
-4. **3단계 (편의)** — 정산 뷰, 검색/필터, PWA 오프라인 큐, **Keep 기존 미완료분 일괄 임포트**
+3. ~~**2단계 (운영)**~~ — 완료. CI/CD(GHCR) + `podman run` 2개 + `podman-restart.service` +
+   httpd VirtualHost + 인증. 백업은 수동 명령만 있고 자동화는 남았다.
+4. **3단계 (편의)** — 정산 뷰 화면, 상세/보강 화면, **Keep 기존 미완료분 일괄 임포트**
    (텍스트 붙여넣기 → 일괄 파싱). 지금 밀린 것부터 이 서비스에서 처리할 수 있게 된다.
+   API 는 `/api/settlements` 까지 있고 화면이 없다.
 5. **4단계** — 상세 보강 화면 고도화 (카테고리/결제수단 자동완성 등).
 
 ## 9. 스코프 밖 (의도적 제외)

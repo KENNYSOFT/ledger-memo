@@ -7,6 +7,20 @@ Google Keep 자유 텍스트 메모를 대체하면서 데이터를 구조화하
 
 설계 문서: [DESIGN.md](./DESIGN.md)
 
+## 쓰는 법
+
+한 줄로 적으면 서버가 파싱해 장소/품목/금액/사람으로 쪼갠다. **소수점은 만원 단위**라는 것만
+알면 된다 (실제 Keep 메모에서 역산한 규칙 — DESIGN.md 2장).
+
+```
+원조해장촌 2인세트 4.5 소주2 1.0 맥주3 1.5     → 45,000 + 10,000 + 15,000 = 70,000
+싸리골 해물파전2.3 지평2 1.0 콜라 0.2?          → 23,000 + 10,000 + 2,000 = 35,000 (불확실 표시)
+택시 8100 3명                                  → 8,100 (3자리 이상은 원 단위), 인원 3
+```
+
+파싱이 틀려도 **원문은 그대로 보존**되므로 나중에 고치거나 재파싱할 수 있다. 영수증 사진만
+찍어 저장해도 유효한 기록이다.
+
 ## 스택
 
 | 구분 | 사용 |
@@ -20,12 +34,16 @@ Google Keep 자유 텍스트 메모를 대체하면서 데이터를 구조화하
 
 ## 로컬 실행
 
-JDK 25 필요. DB 접속 정보는 환경변수로 주입한다 (기본값이 없어 미주입 시 기동 실패).
+JDK 25 필요. 설정은 환경변수로 주입한다 (기본값이 없어 미주입 시 기동 실패).
 
 ```sh
 export LEDGER_DB_URL='jdbc:mysql://127.0.0.1:3306/ledger_memo?connectionTimeZone=UTC'
 export LEDGER_DB_USER='...'
 export LEDGER_DB_PASSWORD='...'
+export LEDGER_ATTACHMENT_ROOT="$PWD/.att"
+export LEDGER_AUTH_USERNAME='dev'
+export LEDGER_AUTH_PASSWORD_HASH='{noop}dev'   # 로컬 전용. 서버에는 Argon2id 해시를 쓴다
+export LEDGER_REMEMBER_ME_KEY='local-dev-key'
 ./gradlew bootRun
 ```
 
@@ -83,9 +101,28 @@ SERVER_ADDRESS=127.0.0.1
 LEDGER_DB_URL=jdbc:mysql://127.0.0.1:3306/ledger_memo?connectionTimeZone=UTC
 LEDGER_DB_USER=ledger_memo
 LEDGER_DB_PASSWORD=$APP_PW
+LEDGER_ATTACHMENT_ROOT=/data/att
+LEDGER_AUTH_USERNAME=kenny
+LEDGER_REMEMBER_ME_KEY=$(openssl rand -hex 32)
 EOF
 chmod 600 ~/.config/ledger-memo/*.env; unset APP_PW ROOT_PW
 ```
+
+로그인 비밀번호 해시는 아직 비어 있다. **평문을 파일이나 명령줄에 두지 않기 위해** 이미지에
+내장된 생성 모드로 만든다 (입력이 화면에 찍히지 않고 `ps` 에도 남지 않는다).
+
+```sh
+podman run --rm -it ghcr.io/kennysoft/ledger-memo:latest --generate-password-hash
+```
+
+출력된 `{argon2}...` 한 줄을 env 파일에 추가한다.
+
+```sh
+printf 'LEDGER_AUTH_PASSWORD_HASH=%s\n' '<붙여넣기>' >> ~/.config/ledger-memo/env
+```
+
+> 🚨 **`LEDGER_REMEMBER_ME_KEY` 를 바꾸면 기존 자동 로그인이 전부 무효가 된다.** 폰에서 다시
+> 로그인해야 하므로 한 번 정하면 유지한다.
 
 암호를 셸 변수로 두 파일에 한 번에 넣어 **값이 어긋날 여지를 없앤다** (`MYSQL_PASSWORD` 와
 `LEDGER_DB_PASSWORD` 는 반드시 같은 값이어야 한다).
