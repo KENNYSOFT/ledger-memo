@@ -25,12 +25,30 @@ spring:
     enabled: true
     locations: classpath:db/migration
 
+  servlet:
+    multipart:
+      # 힙을 거치지 않고 디스크로 직행시킨다 (DESIGN.md 4).
+      file-size-threshold: 0
+      max-file-size: 8MB
+      # 원본과 썸네일을 한 요청에 함께 올린다.
+      max-request-size: 20MB
+
 server:
+  # 이미지에 담기는 기본값. 배포에서는 SERVER_PORT / SERVER_ADDRESS 환경변수로 덮어쓴다
+  # (host 네트워크에서 루프백에만 리슨시키기 위함 — DESIGN.md 7.2).
   port: 8080
-  # 컨테이너 내부에서는 모든 인터페이스에 바인딩한다. 외부 노출 제한은
-  # podman 의 -p 127.0.0.1:8080:8080 이 담당한다 (server.address 를 loopback 으로
-  # 두면 publish 가 붙지 못한다).
   forward-headers-strategy: framework
+
+ledger:
+  attachment:
+    # 컨테이너에 마운트되는 호스트 디렉토리. 로컬 개발에서는 환경변수로 바꾼다.
+    root: ${LEDGER_ATTACHMENT_ROOT:/data/att}
+  auth:
+    username: ${LEDGER_AUTH_USERNAME}
+    # Argon2id 해시. 평문도 해시도 repo 에 두지 않는다 (DESIGN.md 6).
+    password-hash: ${LEDGER_AUTH_PASSWORD_HASH}
+    # remember-me 토큰 서명 키. 바뀌면 기존 자동 로그인이 모두 무효가 된다.
+    remember-me-key: ${LEDGER_REMEMBER_ME_KEY}
 
 management:
   endpoints:

@@ -37,6 +37,9 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-flyway")
     // Flyway 10+ 부터 MySQL 지원은 별도 모듈이고, 위 스타터에 포함되지 않는다.
     implementation("org.flywaydb:flyway-mysql")
+    // Spring Security 의 Argon2PasswordEncoder 는 BouncyCastle 구현을 쓴다. optional
+    // 의존이라 명시하지 않으면 런타임에 ClassNotFoundException 이 난다 (DESIGN.md 6).
+    implementation("org.bouncycastle:bcprov-jdk18on:1.83")
     runtimeOnly("com.mysql:mysql-connector-j")
 
     testImplementation("org.springframework.boot:spring-boot-starter-webmvc-test")
