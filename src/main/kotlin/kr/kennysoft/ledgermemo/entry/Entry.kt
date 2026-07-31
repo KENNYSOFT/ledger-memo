@@ -1,13 +1,22 @@
 package kr.kennysoft.ledgermemo.entry
 
+import jakarta.persistence.CascadeType
 import jakarta.persistence.Column
 import jakarta.persistence.Entity
 import jakarta.persistence.EnumType
 import jakarta.persistence.Enumerated
+import jakarta.persistence.FetchType
 import jakarta.persistence.GeneratedValue
 import jakarta.persistence.GenerationType
 import jakarta.persistence.Id
+import jakarta.persistence.JoinColumn
+import jakarta.persistence.JoinTable
+import jakarta.persistence.ManyToMany
+import jakarta.persistence.OneToMany
+import jakarta.persistence.OrderBy
 import jakarta.persistence.Table
+import kr.kennysoft.ledgermemo.attachment.Attachment
+import kr.kennysoft.ledgermemo.person.EntryPerson
 import org.hibernate.annotations.CreationTimestamp
 import org.hibernate.annotations.UpdateTimestamp
 import java.time.Instant
@@ -68,6 +77,31 @@ class Entry(
     @Column(name = "id")
     var id: Long? = null
 
+    /**
+     * 파싱된 품목. 재파싱 때 통째로 갈아끼우므로 orphanRemoval 을 켠다.
+     */
+    @OneToMany(mappedBy = "entry", cascade = [CascadeType.ALL], orphanRemoval = true, fetch = FetchType.LAZY)
+    @OrderBy("seq ASC")
+    var items: MutableList<EntryItem> = mutableListOf()
+
+    @OneToMany(mappedBy = "entry", cascade = [CascadeType.ALL], orphanRemoval = true, fetch = FetchType.LAZY)
+    var persons: MutableList<EntryPerson> = mutableListOf()
+
+    @OneToMany(mappedBy = "entry", cascade = [CascadeType.ALL], orphanRemoval = true, fetch = FetchType.LAZY)
+    var attachments: MutableList<Attachment> = mutableListOf()
+
+    /**
+     * 태그는 마스터를 공유하므로 cascade 를 걸지 않는다. 새 태그 생성은 TagService 가
+     * 담당한다 (cascade PERSIST 를 걸면 같은 이름 태그가 중복 저장되어 unique 제약에 걸린다).
+     */
+    @ManyToMany(fetch = FetchType.LAZY)
+    @JoinTable(
+        name = "entry_tag",
+        joinColumns = [JoinColumn(name = "entry_id")],
+        inverseJoinColumns = [JoinColumn(name = "tag_id")],
+    )
+    var tags: MutableSet<Tag> = mutableSetOf()
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     lateinit var createdAt: Instant
@@ -75,4 +109,10 @@ class Entry(
     @UpdateTimestamp
     @Column(name = "updated_at", nullable = false)
     lateinit var updatedAt: Instant
+
+    /** 품목을 통째로 교체한다. 파싱 결과 반영과 재파싱에서 함께 쓴다. */
+    fun replaceItems(newItems: List<EntryItem>) {
+        items.clear()
+        items.addAll(newItems)
+    }
 }
