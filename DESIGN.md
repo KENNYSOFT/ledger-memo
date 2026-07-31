@@ -281,28 +281,41 @@ graph TB
         A["Actions: ARM runner<br/>native image → OCI 이미지 → GHCR"]
     end
     subgraph A1["Oracle Cloud A1 (aarch64, 24GB)"]
-        H["Apache httpd (기존, 호스트)<br/>TLS + 리버스 프록시"]
-        subgraph POD["Podman (컨테이너 2개)"]
+        H["Apache httpd (기존 컨테이너)<br/>:8080 / :8443 TLS + 리버스 프록시"]
+        subgraph POD["Podman (컨테이너 2개, --network=host)"]
             APP["ledger-memo<br/>native, arm64<br/>127.0.0.1:8081"]
-            DB["MySQL 8.4 LTS"]
+            DB["MySQL 8.4 LTS<br/>127.0.0.1:3306"]
         end
         V["~/ledger-memo/att<br/>영수증 사진"]
     end
     A -- "GHCR" --> APP
     P["폰 브라우저 (PWA)"] -- "HTTPS 서브도메인" --> H
     H --> APP
-    APP -- "컨테이너 네트워크 DNS" --> DB
+    APP -- "호스트 루프백" --> DB
     APP --> V
 ```
 
 A1 단일 호스트, **Podman** 컨테이너 2개. **Compose 도 Quadlet 도 쓰지 않고 `podman run` 으로
 각각 실행한다.**
 
-- **앞단**: 기존 Apache httpd(호스트)에 서브도메인 VirtualHost 추가 (Caddy 도입 없음).
+- **앞단**: 기존 Apache httpd 컨테이너에 서브도메인 VirtualHost 추가 (Caddy 도입 없음).
 - **앱/DB**: `podman run` 2회. 오케스트레이션 계층을 두지 않는다.
-- **DB 는 호스트에 노출하지 않는다**: 컨테이너 네트워크 DNS 로 `ledger-mysql:3306` 접근.
+- **네트워크는 `--network=host`**: 서버의 기존 컨테이너(httpd, php-fpm)가 이미 이 방식이라
+  맞춘다. 사용자 정의 네트워크의 이름 기반 DNS(aardvark-dns)에 의존하지 않아 구성이 단순하고,
+  httpd 가 같은 네임스페이스에서 `127.0.0.1:8081` 로 바로 프록시한다.
+- **외부 노출은 바인딩 주소로 막는다**: host 네트워크에는 publish 개념이 없으므로 MySQL 은
+  `--bind-address=127.0.0.1`, 앱은 `SERVER_ADDRESS=127.0.0.1` 로 루프백에만 리슨시킨다.
 - **첨부**: 호스트 디렉토리 `~/ledger-memo/att` 를 볼륨 마운트 (컨테이너 교체와 무관하게
   파일이 남아야 한다).
+
+호스트 포트 배치 — 이 서버는 rootless 라 httpd 가 80/443 을 직접 쓰지 못하고, firewalld 가
+80/443 을 8080/8443 으로 포워딩한다.
+
+| 포트 | 용도 |
+|---|---|
+| 8080 / 8443 | 기존 httpd (firewalld 가 80/443 에서 포워딩) |
+| 8081 | ledger-memo (루프백 전용) |
+| 3306 | MySQL (루프백 전용) |
 
 ### 7.1 필수 제약
 
@@ -321,25 +334,41 @@ A1 단일 호스트, **Podman** 컨테이너 2개. **Compose 도 Quadlet 도 쓰
 
 필요 모듈: `mod_ssl`, `mod_proxy`, `mod_proxy_http`, `mod_headers`.
 
-```apache
-<VirtualHost *:443>
-    ServerName memo.kennysoft.kr
+httpd 도 컨테이너(`svc-httpd`)다. 설정은 호스트 `/httpd-data/conf/` 가 컨테이너
+`/usr/local/apache2/conf/` 로 마운트되어 있고, 로그는 `/httpd-data/logs/` 에 쌓인다.
+**리슨 포트는 8080/8443** 이며 firewalld 가 80/443 을 여기로 포워딩한다.
 
-    SSLEngine on
-    # 인증서는 기존 certbot 관리 체계에 서브도메인 추가
+```apache
+<VirtualHost *:8443>
+    ServerName memo.kennysoft.kr
 
     ProxyPreserveHost On
     RequestHeader set X-Forwarded-Proto "https"
-    ProxyPass        / http://127.0.0.1:8081/
-    ProxyPassReverse / http://127.0.0.1:8081/
+    ProxyPass        / http://localhost:8081/
+    ProxyPassReverse / http://localhost:8081/
 
-    # 사진 업로드 (앱 max-file-size 8MB 보다 약간 크게)
+    # 영수증 사진 업로드 (앱 max-file-size 8MB 보다 약간 크게)
     LimitRequestBody 10485760
 
-    ErrorLog  /var/log/httpd/memo_error.log
-    CustomLog /var/log/httpd/memo_access.log combined
+    Protocols h2 h2c http/1.1
+    H2WindowSize 5242880
+
+    # TLS 는 기존 블록과 동일한 와일드카드 인증서를 공유한다
+    # (conf/server.crt + server.key + server-ca.crt)
+
+    TraceEnable off
+
+    ErrorLog  /usr/local/apache2/logs/memo_error.log
+    CustomLog /usr/local/apache2/logs/memo_access.log combined
 </VirtualHost>
 ```
+
+- **인증서를 따로 발급하지 않는다.** 기존 `*.kennysoft.kr` 와일드카드를 그대로 참조하므로
+  certbot 갱신이 자동으로 반영된다.
+- **`X-Forwarded-Proto` 는 빠뜨리면 안 된다.** 앱이 `forward-headers-strategy: framework` 로
+  이 헤더를 보고 원래 스킴을 판단한다. 없으면 리다이렉트가 `http://` 로 나가 PWA 에서 깨진다.
+- 같은 서버의 nextcloud 프록시 블록에 있는 `nocanon` / `AllowEncodedSlashes NoDecode` /
+  WebSocket Rewrite 는 그쪽 요구사항이라 여기서는 쓰지 않는다.
 
 앱 측 대응 설정:
 
@@ -349,16 +378,26 @@ server:
   forward-headers-strategy: framework   # X-Forwarded-* 반영 (redirect, secure 쿠키)
 ```
 
-**`server.address` 를 loopback 으로 두지 말 것.** 컨테이너 내부에서 `127.0.0.1` 에 바인딩하면
-publish 된 포트가 붙지 못한다. 외부 노출 제한은 podman 의 `-p 127.0.0.1:8081:8080` 이 담당한다.
-MySQL 컨테이너는 호스트 포트를 아예 publish 하지 않아 컨테이너 네트워크로만 접근된다.
+위는 이미지에 담기는 기본값이고, **배포 시 환경변수로 덮어쓴다**. Spring Boot 의 relaxed
+binding 이 `SERVER_PORT` / `SERVER_ADDRESS` 를 그대로 받으므로 환경마다 이미지를 다시 만들
+필요가 없다.
 
-호스트 포트 8081 은 8080 이 서버의 기존 서비스에 점유되어 선택한 값이다. **컨테이너 내부
-포트는 8080 을 유지**하므로 앱 설정(`server.port`)과 이미지는 배포 환경과 무관하게 고정된다.
+```
+SERVER_PORT=8081        # 8080 은 기존 httpd 가 쓴다
+SERVER_ADDRESS=127.0.0.1
+```
 
-**SELinux 주의 (Oracle Linux 계열)**: httpd 가 프록시로 바깥 연결을 맺는 것이 기본 정책에서
-막혀 502 가 난다. `setsebool -P httpd_can_network_connect 1` 이 필요하다. 볼륨 마운트에는
-`:Z` 옵션을 붙인다.
+**host 네트워크에서는 loopback 바인딩이 필수다.** 컨테이너가 호스트 네트워크 네임스페이스를
+그대로 쓰므로 `0.0.0.0` 에 리슨하면 인스턴스 공인 IP 로 앱이 곧장 노출된다. MySQL 도 같은
+이유로 `--bind-address=127.0.0.1` 을 준다.
+
+> 반대로 **`-p` publish 방식이라면 loopback 바인딩을 하면 안 된다** — 컨테이너 내부에서
+> `127.0.0.1` 에 묶으면 매핑된 포트가 붙지 못한다. 두 방식의 요구가 정반대이므로, 네트워크
+> 방식을 바꿀 때 이 설정을 함께 검토할 것.
+
+**SELinux**: `httpd_can_network_connect` 는 **필요 없다.** 그 boolean 은 호스트에서 직접 도는
+httpd(`httpd_t`)에 적용되는데, 이 서버의 httpd 는 컨테이너라 `container_t` 도메인에서 실행되어
+해당 정책의 대상이 아니다. 볼륨 마운트에는 `:Z` 옵션을 붙인다.
 
 첨부 이미지는 인증이 필요하므로 httpd 가 직접 서빙하지 않고 **앱이 스트리밍**한다 (httpd 직접
 서빙은 인증을 우회한다). 개인용 트래픽이라 성능 문제는 없다.
@@ -386,25 +425,25 @@ native 빌드는 6GB 이상의 메모리를 쓰므로 CI runner(ARM64 public run
 
 ### 7.4 컨테이너 실행
 
-네트워크 1회 생성 후 컨테이너 2개를 각각 실행한다.
+컨테이너 2개를 각각 실행한다. 별도 네트워크를 만들지 않는다.
 
 ```bash
-podman network create ledger
-
-podman run -d --name ledger-mysql --network ledger --restart=always \
+podman run -d --name ledger-mysql --network=host --restart=always \
   -v ledger-mysql-data:/var/lib/mysql \
   --env-file ~/.config/ledger-memo/mysql.env \
-  docker.io/library/mysql:8.4
+  docker.io/library/mysql:8.4 \
+  --bind-address=127.0.0.1 \
+  --character-set-server=utf8mb4 --collation-server=utf8mb4_0900_ai_ci
 
-podman run -d --name ledger-memo --network ledger --restart=always \
-  -p 127.0.0.1:8081:8080 \
+podman run -d --name ledger-memo --network=host --restart=always \
   -v ~/ledger-memo/att:/data/att:Z \
   --env-file ~/.config/ledger-memo/env \
   ghcr.io/kennysoft/ledger-memo:latest
 ```
 
-MySQL 은 포트를 publish 하지 않는다. 앱은 컨테이너 네트워크 DNS 로 `ledger-mysql:3306` 에
-접근하므로 호스트에서 DB 가 보이지 않는다.
+`--network=host` 이므로 `-p` 를 쓰지 않는다 (지정해도 무시된다). 두 컨테이너 모두 루프백에만
+리슨하므로 외부에서 직접 닿지 않고, 앱은 `jdbc:mysql://127.0.0.1:3306/...` 로 DB 에 접근한다.
+rootless 는 1024 미만 포트를 바인딩할 수 없지만 8081/3306 은 해당하지 않는다.
 
 > 🚨 **재부팅 자동 시작**: Podman 은 데몬이 없어서 **`--restart=always` 만으로는 호스트 재부팅
 > 후 컨테이너가 뜨지 않는다** (Docker 와 다른 지점). 다음을 한 번 켜두면 부팅 시
@@ -424,8 +463,7 @@ Actions 가 GHCR 에 이미지를 push 하고, 서버의 재생성 스크립트�
 set -e
 podman pull ghcr.io/kennysoft/ledger-memo:latest
 podman rm -f ledger-memo
-podman run -d --name ledger-memo --network ledger --restart=always \
-  -p 127.0.0.1:8081:8080 \
+podman run -d --name ledger-memo --network=host --restart=always \
   -v ~/ledger-memo/att:/data/att:Z \
   --env-file ~/.config/ledger-memo/env \
   ghcr.io/kennysoft/ledger-memo:latest

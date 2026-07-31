@@ -45,12 +45,20 @@ Podman 컨테이너 2개(MySQL + 앱)를 각각 실행한다. Compose 도 Quadle
 
 ## 1. 네트워크
 
-앱이 컨테이너 이름으로 DB 에 접근하므로 사용자 정의 네트워크가 필요하다 (Podman 기본
-네트워크에서는 이름 기반 DNS 가 동작하지 않는다).
+**두 컨테이너 모두 `--network=host` 로 띄운다.** 이 서버의 기존 컨테이너(httpd, php-fpm)가
+이미 같은 방식이라 맞추는 것이고, 사용자 정의 네트워크의 이름 기반 DNS 에 의존하지 않아
+구성이 단순하다. 따로 만들 네트워크가 없다.
 
-```sh
-podman network create ledger
-```
+포트는 이렇게 나뉜다. rootless 라 httpd 가 80/443 을 직접 쓰지 못하고 firewalld 가
+80/443 을 8080/8443 으로 포워딩하는 구조이므로, **8080 은 이미 httpd 차지다.**
+
+| 포트 | 용도 |
+|---|---|
+| 8080 / 8443 | 기존 httpd |
+| 8081 | ledger-memo |
+| 3306 | MySQL |
+
+앱과 DB 모두 `127.0.0.1` 에만 리슨시켜 외부에 노출하지 않는다.
 
 ## 2. 시크릿 파일
 
@@ -70,7 +78,9 @@ MYSQL_USER=ledger_memo
 MYSQL_PASSWORD=$APP_PW
 EOF
 cat > ~/.config/ledger-memo/env <<EOF
-LEDGER_DB_URL=jdbc:mysql://ledger-mysql:3306/ledger_memo?connectionTimeZone=UTC
+SERVER_PORT=8081
+SERVER_ADDRESS=127.0.0.1
+LEDGER_DB_URL=jdbc:mysql://127.0.0.1:3306/ledger_memo?connectionTimeZone=UTC
 LEDGER_DB_USER=ledger_memo
 LEDGER_DB_PASSWORD=$APP_PW
 EOF
@@ -94,15 +104,16 @@ chmod 600 ~/.config/ledger-memo/*.env; unset APP_PW ROOT_PW
 앱이 처음 뜰 때 Flyway 가 만든다.
 
 ```sh
-podman run -d --name ledger-mysql --network ledger --restart=always \
+podman run -d --name ledger-mysql --network=host --restart=always \
   -v ledger-mysql-data:/var/lib/mysql \
   --env-file ~/.config/ledger-memo/mysql.env \
   docker.io/library/mysql:8.4 \
+  --bind-address=127.0.0.1 \
   --character-set-server=utf8mb4 --collation-server=utf8mb4_0900_ai_ci
 ```
 
-- **호스트 포트를 publish 하지 않는다.** 앱만 컨테이너 네트워크로 접근하면 되므로 `-p` 를
-  주지 않아 외부 노출면을 만들지 않는다.
+- 🚨 **`--bind-address=127.0.0.1` 이 외부 노출을 막는 유일한 장치다.** host 네트워크에는
+  publish 개념이 없어 이걸 빼면 MySQL 이 인스턴스 공인 IP 에 그대로 열린다.
 - 이미지 뒤의 인자는 `mysqld` 에 그대로 전달된다. 8.4 기본값도 utf8mb4 이지만, 한글 저장과
   정렬이 서버 설정에 좌우되므로 명시한다.
 - 데이터는 named volume `ledger-mysql-data` 에 남아 컨테이너를 지워도 유지된다
@@ -127,21 +138,28 @@ podman logs ledger-mysql 2>&1 | grep -m1 "ready for connections"
 podman exec -it ledger-mysql mysql -u ledger_memo -p ledger_memo
 ```
 
+3306 이 비어 있는지 미리 확인하려면 (다른 DB 가 떠 있으면 충돌한다):
+
+```sh
+ss -lntp | grep 3306 || echo "3306 비어 있음"
+```
+
 ## 4. 앱 컨테이너
 
 ```sh
 mkdir -p ~/ledger-memo/att
 
-podman run -d --name ledger-memo --network ledger --restart=always \
-  -p 127.0.0.1:8081:8080 \
+podman run -d --name ledger-memo --network=host --restart=always \
   -v ~/ledger-memo/att:/data/att:Z \
   --env-file ~/.config/ledger-memo/env \
   ghcr.io/kennysoft/ledger-memo:latest
 ```
 
-- 호스트 포트는 **8081** 이다 (8080 은 이 서버의 기존 서비스가 쓰고 있다). `127.0.0.1` 에만
-  publish 해 앞단 httpd 만 접근할 수 있게 한다. **컨테이너 내부 포트는 8080 그대로**이므로
-  앱 설정이나 이미지는 건드리지 않는다.
+- 포트와 바인딩 주소는 **env 파일의 `SERVER_PORT` / `SERVER_ADDRESS`** 가 정한다 (Spring Boot
+  가 환경변수를 그대로 받는다). 이미지 기본값은 8080 이지만 환경마다 이미지를 다시 만들 필요가
+  없다.
+- 🚨 **`SERVER_ADDRESS=127.0.0.1` 을 빼면 앱이 공인 IP 에 그대로 열린다.** host 네트워크에는
+  publish 가 없어 바인딩 주소가 유일한 차단 수단이다.
 - 첨부 파일은 호스트 디렉토리에 두어 컨테이너 교체와 무관하게 남는다. SELinux 환경에서는
   `:Z` 가 필요하다.
 - 🚨 **rootless 에서는 컨테이너의 uid 0 이 호스트의 실행 사용자로 매핑된다.** 홈 아래에 두면
@@ -159,15 +177,7 @@ sudo systemctl enable --now podman-restart.service          # rootful
 systemctl --user enable --now podman-restart.service        # rootless (+ loginctl enable-linger $USER)
 ```
 
-## 6. SELinux (Oracle Linux 계열)
-
-httpd 가 프록시로 바깥 연결을 맺는 것이 기본 정책에서 막혀 502 가 난다.
-
-```sh
-sudo setsebool -P httpd_can_network_connect 1
-```
-
-## 7. 검증
+## 6. 검증
 
 ```sh
 curl -s http://127.0.0.1:8081/api/ping
@@ -177,7 +187,15 @@ podman stats --no-stream ledger-memo
 `{"status":"ok","entryCount":0}` 이 나오면 **DB 연결 + Flyway 마이그레이션 7개 테이블 + JPA
 매핑 검증**이 모두 통과한 것이다. 실패하면 `podman logs ledger-memo` 를 먼저 본다.
 
-그 뒤 httpd VirtualHost (DESIGN.md 7.2) 를 올리고 서브도메인 인증서를 발급한다.
+## 7. 리버스 프록시
+
+VirtualHost (DESIGN.md 7.2) 를 `/httpd-data/conf/` 의 설정에 추가하고 `svc-httpd` 를 재시작한다.
+**기존 `*.kennysoft.kr` 와일드카드 인증서를 공유하므로 서브도메인 인증서 발급은 필요 없다.**
+
+```sh
+podman restart svc-httpd
+curl -s https://memo.kennysoft.kr/api/ping
+```
 
 ---
 
@@ -189,8 +207,7 @@ podman stats --no-stream ledger-memo
 ```sh
 podman pull ghcr.io/kennysoft/ledger-memo:latest
 podman rm -f ledger-memo
-podman run -d --name ledger-memo --network ledger --restart=always \
-  -p 127.0.0.1:8081:8080 \
+podman run -d --name ledger-memo --network=host --restart=always \
   -v ~/ledger-memo/att:/data/att:Z \
   --env-file ~/.config/ledger-memo/env \
   ghcr.io/kennysoft/ledger-memo:latest
