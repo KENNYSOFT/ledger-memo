@@ -79,13 +79,15 @@ class EntryService(
         val entry = get(id)
         request.occurredOn?.let { entry.occurredOn = it }
         request.occurredAt?.let { entry.occurredAt = it }
-        request.place?.let { entry.place = it }
         request.totalAmount?.let { entry.totalAmount = it }
-        request.categoryHint?.let { entry.categoryHint = it }
-        request.paymentHint?.let { entry.paymentHint = it }
         request.headcount?.let { entry.headcount = it }
-        request.memo?.let { entry.memo = it }
         request.uncertain?.let { entry.uncertain = it }
+        // 문자열 필드는 빈 값을 "지움"으로 받는다. 필드를 아예 보내지 않은 것(null)과
+        // 화면에서 비운 것("")을 구분해야 상세 화면에서 값을 지울 수 있다.
+        request.place?.let { entry.place = it.ifBlank { null } }
+        request.categoryHint?.let { entry.categoryHint = it.ifBlank { null } }
+        request.paymentHint?.let { entry.paymentHint = it.ifBlank { null } }
+        request.memo?.let { entry.memo = it.ifBlank { null } }
         request.items?.let { items ->
             entry.replaceItems(items.mapIndexed { index, it ->
                 EntryItem(entry, index, it.name, it.qty, it.unitPrice, it.amount)
@@ -135,6 +137,29 @@ class EntryService(
             throw ResponseStatusException(HttpStatus.NOT_FOUND, "entry $id 없음")
         }
         entryRepository.deleteById(id)
+    }
+
+    /**
+     * 여러 줄을 각각 하나의 기록으로 만든다. Keep 에 쌓인 미완료분 이관용이다.
+     *
+     * 한 줄이 실패해도 전체를 되돌리지 않는다. 수백 줄을 붙여넣었을 때 한 줄 때문에 전부
+     * 날리는 편보다, 성공분을 남기고 실패한 원문을 돌려주어 손으로 처리하게 하는 편이 낫다.
+     */
+    @Transactional
+    fun bulkImport(text: String): BulkImportResponse {
+        val created = mutableListOf<Entry>()
+        val failed = mutableListOf<FailedLine>()
+
+        text.lineSequence()
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .forEach { line ->
+                runCatching { create(EntryCreateRequest(rawText = line)) }
+                    .onSuccess { created += it }
+                    .onFailure { failed += FailedLine(line, it.message ?: it::class.simpleName.orEmpty()) }
+            }
+
+        return BulkImportResponse(created.map { EntrySummaryResponse.from(it) }, failed)
     }
 
     /** 파싱 결과 중 자식 컬렉션(품목/사람/태그)을 반영한다. */

@@ -2,6 +2,8 @@ package kr.kennysoft.ledgermemo.entry
 
 import jakarta.validation.constraints.Size
 import kr.kennysoft.ledgermemo.parse.ParsedLine
+import kr.kennysoft.ledgermemo.person.EntryPerson
+import kr.kennysoft.ledgermemo.person.EntryPersonRole
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
@@ -109,6 +111,43 @@ data class AttachmentResponse(
     val hasThumb: Boolean,
 )
 
+/** 상세 화면에서 정산을 다루려면 이름만으로는 부족해 식별자와 금액을 함께 준다. */
+data class EntryPersonResponse(
+    val id: Long,
+    val personId: Long,
+    val name: String,
+    val role: EntryPersonRole,
+    val shareAmount: Int?,
+    val settled: Boolean,
+) {
+    companion object {
+        fun from(entryPerson: EntryPerson) = EntryPersonResponse(
+            id = requireNotNull(entryPerson.id),
+            personId = requireNotNull(entryPerson.person.id),
+            name = entryPerson.person.name,
+            role = entryPerson.role,
+            shareAmount = entryPerson.shareAmount,
+            settled = entryPerson.settled,
+        )
+    }
+}
+
+/**
+ * 여러 줄을 한 번에 밀어 넣는다. Keep 에 쌓인 미완료분을 옮길 때 쓴다 (DESIGN.md 8-3단계).
+ */
+data class BulkImportRequest(
+    @field:Size(max = 100_000)
+    val text: String,
+)
+
+data class BulkImportResponse(
+    val created: List<EntrySummaryResponse>,
+    /** 파싱은 했지만 저장하지 못한 줄. 원문을 돌려주어 사용자가 손으로 처리할 수 있게 한다. */
+    val failed: List<FailedLine>,
+)
+
+data class FailedLine(val text: String, val reason: String)
+
 /** 목록용 요약. 품목/첨부 전체를 싣지 않는다. */
 data class EntrySummaryResponse(
     val id: Long,
@@ -156,7 +195,7 @@ data class EntryDetailResponse(
     val createdAt: Instant,
     val items: List<ItemResponse>,
     val attachments: List<AttachmentResponse>,
-    val personNames: List<String>,
+    val persons: List<EntryPersonResponse>,
     val tags: List<String>,
 ) {
     companion object {
@@ -179,7 +218,7 @@ data class EntryDetailResponse(
             attachments = entry.attachments.map {
                 AttachmentResponse(requireNotNull(it.id), it.contentType, it.bytes, it.thumbPath != null)
             },
-            personNames = entry.persons.map { it.person.name },
+            persons = entry.persons.map { EntryPersonResponse.from(it) },
             tags = entry.tags.map { it.name }.sorted(),
         )
     }

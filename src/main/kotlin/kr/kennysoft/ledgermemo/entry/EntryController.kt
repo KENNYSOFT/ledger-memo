@@ -31,6 +31,11 @@ class EntryController(
     fun create(@Valid @RequestBody request: EntryCreateRequest): EntryDetailResponse =
         EntryDetailResponse.from(entryService.create(request))
 
+    /** 여러 줄을 한 번에 기록으로 만든다 (Keep 미완료분 이관). */
+    @PostMapping("/api/entries/bulk")
+    fun bulkImport(@Valid @RequestBody request: BulkImportRequest): BulkImportResponse =
+        entryService.bulkImport(request.text)
+
     @GetMapping("/api/entries")
     fun list(
         @RequestParam(required = false) status: EntryStatus?,
