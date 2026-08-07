@@ -543,12 +543,34 @@ podman run -d --name ledger-memo --network=host --restart=always \
 
 - **비밀번호는 env 파일로만 다룬다** (`~/.config/ledger-memo/{mysql.env,env}`, 권한 600).
   `podman run -e` 로 넘기면 shell history 와 `ps` 에 남는다.
-- **MySQL 컨테이너는 호스트 포트를 publish 하지 않는다.** 앱만 컨테이너 네트워크 DNS 로
-  접근하므로 외부 노출면을 만들 이유가 없다.
+- **MySQL 은 루프백에만 리슨한다** (`--bind-address=127.0.0.1`). host 네트워크에는 publish
+  개념이 없어 바인딩 주소가 유일한 차단 수단이다.
 - DB 와 앱 계정은 MySQL 이미지의 `MYSQL_DATABASE`/`MYSQL_USER`/`MYSQL_PASSWORD` 로 첫 기동
   때 자동 생성되고, 테이블은 앱 첫 기동 때 Flyway 가 만든다. 수동 SQL 이 필요 없다.
 - **MySQL 준비 완료를 확인한 뒤 앱을 띄운다.** 앱이 먼저 뜨면 접속 실패로 재시작을 반복한다.
-- 검증은 `GET /api/ping` — 200 이면 DB 연결, Flyway 7개 테이블, JPA 매핑 검증이 모두 통과다.
+- 검증은 `GET /actuator/health` — `UP` 이면 DB 커넥션까지 정상이다. **`/api/ping` 은 인증
+  대상이라 401 이 정상**이므로 배포 검증에 쓰지 않는다.
+- 🚨 **재배포에서 `podman rm -f` 가 스토리지 정리에 실패할 수 있다** (rootless overlay,
+  podman 4.9 실측). `replacing mount point ... file exists` 가 그것이다.
+
+  이때 **컨테이너 레코드는 이미 지워지고 스토리지에만 남는다.** `podman ps -a` 에는 안 보이고
+  `podman ps -a --storage` 에 `Storage` 로 나오며, 정지할 컨테이너가 없으니 `podman stop`
+  으로는 손댈 수 없다. **순서가 중요하다.**
+
+  1. `podman unshare mount | grep <레이어해시>` 로 마운트가 실제로 남았는지 본다
+  2. 남아 있으면 `podman unshare umount <merged>`
+  3. `podman unshare rm -rf <merged>` — 오버레이가 합쳐 보여주던 뷰라 지워도 데이터가
+     아니다 (첨부는 호스트 디렉토리에, DB 는 volume 에 있다). 실측 사례는 마운트가 이미
+     풀리고 빈 디렉토리 여섯 개만 남아 있었다
+  4. `podman rm --storage -f <이름>` 으로 레코드를 걷어내고 다시 `run`
+
+  **3 을 건너뛰면 4 도 실패한다.** `merged` 가 남아 있는 동안은 `-f` 를 붙여도 같은
+  `replacing mount point` 오류가 난다. 반대로 `-f` 를 빼면
+  `container "..." is mounted and cannot be removed without using force: container state improper`
+  로 거부되므로, **3 을 먼저 하고 4 에 `-f` 를 붙이는 조합**이라야 통과한다.
+
+  `podman system reset` 은 다른 컨테이너까지 날리므로 쓰지 않는다. 급하면 이름만 바꿔
+  (`ledger-memo2`) 먼저 띄워도 된다 — httpd 는 포트로 프록시하므로 이름과 무관하다.
 
 ### 7.7 공개 저장소 운영 규칙
 

@@ -217,12 +217,15 @@ systemctl --user enable --now podman-restart.service        # rootless (+ loginc
 ## 6. 검증
 
 ```sh
-curl -s http://127.0.0.1:8081/api/ping
+curl -s http://127.0.0.1:8081/actuator/health
 podman stats --no-stream ledger-memo
 ```
 
-`{"status":"ok","entryCount":0}` 이 나오면 **DB 연결 + Flyway 마이그레이션 7개 테이블 + JPA
-매핑 검증**이 모두 통과한 것이다. 실패하면 `podman logs ledger-memo` 를 먼저 본다.
+`{"status":"UP"}` 이 나오면 **DB 연결까지 정상**이다 (헬스체크가 커넥션을 확인한다). 실패하면
+`podman logs ledger-memo` 를 먼저 본다.
+
+> 🚨 **`/api/ping` 은 401 이 정상이다.** 인증 도입 후 API 는 모두 보호 대상이라, 401 이
+> 돌아온다는 것은 인증 필터가 걸려 있다는 뜻이다. 배포 검증에는 위 헬스체크를 쓴다.
 
 ## 7. 리버스 프록시
 
@@ -231,7 +234,7 @@ VirtualHost (DESIGN.md 7.2) 를 `/httpd-data/conf/` 의 설정에 추가하고 `
 
 ```sh
 podman restart svc-httpd
-curl -s https://memo.kennysoft.kr/api/ping
+curl -s -o /dev/null -w '%{http_code}\n' https://memo.kennysoft.kr/login.html
 ```
 
 ---
