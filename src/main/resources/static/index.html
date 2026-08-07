@@ -73,6 +73,8 @@
     background: var(--card); color: var(--text);
     border: 1px solid var(--line); border-radius: 10px;
   }
+  /* 저장이 가장 자주 누르는 버튼이라 좁은 화면에서도 넉넉하게 둔다. */
+  button.wide { flex: 1.6; }
   button:disabled { opacity: .5; }
 
   .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; min-height: 8px; }
@@ -183,10 +185,16 @@
     <div id="queued" hidden></div>
 
     <div class="row">
-      <button class="ghost" id="btn-photo">사진</button>
-      <button class="primary" id="btn-save">저장</button>
+      <button class="ghost" id="btn-camera">촬영</button>
+      <button class="ghost" id="btn-gallery">갤러리</button>
+      <button class="primary wide" id="btn-save">저장</button>
     </div>
-    <input type="file" id="photo" accept="image/*" capture="environment" multiple hidden>
+    <!--
+      capture 가 있으면 카메라만 열리고 갤러리를 고를 수 없다. 즉석 촬영은 그대로 두고,
+      이미 찍어둔 사진을 넣는 경로를 따로 뒀다.
+    -->
+    <input type="file" id="photo-camera" accept="image/*" capture="environment" multiple hidden>
+    <input type="file" id="photo-gallery" accept="image/*" multiple hidden>
     <div class="thumbs" id="pending-thumbs"></div>
 
     <h2 class="date">최근 저장</h2>

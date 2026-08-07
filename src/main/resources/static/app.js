@@ -457,7 +457,9 @@ function renderDetail() {
       <label>사진</label>
       <div class="thumbs" id="d-photos">${photos || '<span class="hint">없음</span>'}</div>
       <button type="button" class="ghost" id="d-add-photo">사진 추가</button>
-      <input type="file" id="d-photo-input" accept="image/*" capture="environment" multiple hidden>
+      <!-- 나중에 보강하는 화면이라 이미 찍어둔 사진을 넣는 경우가 많다. capture 를 걸지 않아
+           기기의 선택 화면(촬영/갤러리)이 뜨게 한다. -->
+      <input type="file" id="d-photo-input" accept="image/*" multiple hidden>
     </div>
 
     <div class="row">
@@ -734,11 +736,17 @@ function init() {
 
   $('line').addEventListener('input', schedulePreview);
   $('btn-save').onclick = save;
-  $('btn-photo').onclick = () => $('photo').click();
-  $('photo').onchange = (event) => {
-    addPhotos([...event.target.files]);
-    event.target.value = '';
-  };
+
+  // 촬영은 카메라를 바로 열고(capture), 갤러리는 기기의 선택 화면을 띄운다.
+  $('btn-camera').onclick = () => $('photo-camera').click();
+  $('btn-gallery').onclick = () => $('photo-gallery').click();
+  ['photo-camera', 'photo-gallery'].forEach((id) => {
+    $(id).onchange = (event) => {
+      addPhotos([...event.target.files]);
+      // 같은 파일을 다시 골라도 change 가 나도록 비운다.
+      event.target.value = '';
+    };
+  });
 
   $('list').addEventListener('click', onListClick);
   $('recent').addEventListener('click', (event) => {
