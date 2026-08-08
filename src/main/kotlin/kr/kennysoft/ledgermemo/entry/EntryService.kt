@@ -1,6 +1,7 @@
 package kr.kennysoft.ledgermemo.entry
 
 import kr.kennysoft.ledgermemo.attachment.AttachmentRepository
+import kr.kennysoft.ledgermemo.attachment.EntryAttachmentCount
 import kr.kennysoft.ledgermemo.parse.LineParser
 import kr.kennysoft.ledgermemo.parse.ParsedLine
 import kr.kennysoft.ledgermemo.parse.PersonDictionary
@@ -52,8 +53,11 @@ class EntryService(
         pageable: Pageable,
     ): Page<EntrySummaryResponse> {
         val page = entryRepository.search(status, from, to, q?.takeIf { it.isNotBlank() }, personId, pageable)
-        val counts = attachmentCounts(page.content)
-        return page.map { EntrySummaryResponse.from(it, counts[it.id] ?: 0) }
+        val summaries = attachmentSummaries(page.content)
+        return page.map { entry ->
+            val summary = summaries[entry.id]
+            EntrySummaryResponse.from(entry, summary?.count?.toInt() ?: 0, summary?.firstId)
+        }
     }
 
     fun getDetail(id: Long): EntryDetailResponse = EntryDetailResponse.from(get(id))
@@ -69,14 +73,17 @@ class EntryService(
         .orElseThrow { ResponseStatusException(HttpStatus.NOT_FOUND, "entry $id 없음") }
 
     private fun toSummaries(entries: List<Entry>): List<EntrySummaryResponse> {
-        val counts = attachmentCounts(entries)
-        return entries.map { EntrySummaryResponse.from(it, counts[it.id] ?: 0) }
+        val summaries = attachmentSummaries(entries)
+        return entries.map { entry ->
+            val summary = summaries[entry.id]
+            EntrySummaryResponse.from(entry, summary?.count?.toInt() ?: 0, summary?.firstId)
+        }
     }
 
-    private fun attachmentCounts(entries: List<Entry>): Map<Long, Int> {
+    private fun attachmentSummaries(entries: List<Entry>): Map<Long, EntryAttachmentCount> {
         val ids = entries.mapNotNull { it.id }
         if (ids.isEmpty()) return emptyMap()
-        return attachmentRepository.countByEntryIds(ids).associate { it.entryId to it.count.toInt() }
+        return attachmentRepository.countByEntryIds(ids).associateBy { it.entryId }
     }
 
     /**
@@ -256,7 +263,7 @@ class EntryService(
             }
 
         // 방금 만든 기록이라 첨부는 아직 없다.
-        return BulkImportResponse(created.map { EntrySummaryResponse.from(it, 0) }, failed)
+        return BulkImportResponse(created.map { EntrySummaryResponse.from(it, 0, null) }, failed)
     }
 
     /**

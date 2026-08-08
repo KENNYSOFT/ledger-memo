@@ -175,9 +175,11 @@ data class EntrySummaryResponse(
     val status: EntryStatus,
     val rawText: String?,
     val attachmentCount: Int,
+    /** 목록에 띄울 대표 썸네일. 첨부가 없으면 null. */
+    val firstAttachmentId: Long?,
 ) {
     companion object {
-        fun from(entry: Entry, attachmentCount: Int) = EntrySummaryResponse(
+        fun from(entry: Entry, attachmentCount: Int, firstAttachmentId: Long?) = EntrySummaryResponse(
             id = requireNotNull(entry.id),
             occurredOn = entry.occurredOn,
             occurredAt = entry.occurredAt,
@@ -187,6 +189,7 @@ data class EntrySummaryResponse(
             status = entry.status,
             rawText = entry.rawText,
             attachmentCount = attachmentCount,
+            firstAttachmentId = firstAttachmentId,
         )
     }
 }

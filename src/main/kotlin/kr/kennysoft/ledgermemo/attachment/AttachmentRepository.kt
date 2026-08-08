@@ -14,7 +14,7 @@ interface AttachmentRepository : JpaRepository<Attachment, Long> {
      */
     @Query(
         """
-        SELECT a.entry.id AS entryId, COUNT(a) AS count
+        SELECT a.entry.id AS entryId, COUNT(a) AS count, MIN(a.id) AS firstId
         FROM Attachment a
         WHERE a.entry.id IN :entryIds
         GROUP BY a.entry.id
@@ -23,8 +23,13 @@ interface AttachmentRepository : JpaRepository<Attachment, Long> {
     fun countByEntryIds(@Param("entryIds") entryIds: Collection<Long>): List<EntryAttachmentCount>
 }
 
-/** 기록별 첨부 개수. */
+/**
+ * 기록별 첨부 개수와 대표 첨부.
+ *
+ * 목록에 썸네일을 띄우려면 개수만으로는 부족해 가장 먼저 올린 첨부의 id 를 함께 받는다.
+ */
 interface EntryAttachmentCount {
     val entryId: Long
     val count: Long
+    val firstId: Long
 }

@@ -266,13 +266,20 @@ async function flushQueue() {
 
 function entryCard(entry, options = {}) {
   const time = entry.occurredAt ? entry.occurredAt.slice(0, 5) : '';
-  const attachments = entry.attachmentCount > 0 ? `사진 ${entry.attachmentCount}` : '';
   const actions = options.withActions
     ? `<div class="actions">
          <button class="done" data-done="${entry.id}">${entry.status === 'DONE' ? '되돌리기' : '완료'}</button>
          <button class="del" data-del="${entry.id}">삭제</button>
        </div>`
     : '';
+
+  // 대표 썸네일을 바로 보여준다. 영수증이 무엇인지 목록에서 알아볼 수 있어야 한다.
+  const photo = entry.firstAttachmentId
+    ? `<img class="thumb" src="/api/attachments/${entry.firstAttachmentId}?thumb=true"
+            alt="첨부 사진" data-view="${entry.firstAttachmentId}">
+       ${entry.attachmentCount > 1 ? `<div class="more">사진 ${entry.attachmentCount}장 - 상세에서 모두 보기</div>` : ''}`
+    : '';
+
   return `
     <div class="card" data-id="${entry.id}">
       <div class="top">
@@ -283,11 +290,43 @@ function entryCard(entry, options = {}) {
       <div class="meta">
         <span>${time}</span>
         ${entry.uncertain ? '<span>불확실</span>' : ''}
-        ${attachments ? `<span>${attachments}</span>` : ''}
         ${entry.status === 'DONE' ? '<span>완료</span>' : ''}
       </div>
+      ${photo}
       ${actions}
     </div>`;
+}
+
+// --- 사진 원본 보기 ---------------------------------------------------------
+
+/**
+ * 원본을 전체화면으로 띄운다.
+ *
+ * 목록·상세 모두 썸네일(`?thumb=true`)을 쓰고, 크게 볼 때만 원본을 받는다. 원본은 캐시가
+ * 오래 걸려 있어 두 번째부터는 네트워크를 타지 않는다.
+ */
+function openViewer(attachmentId) {
+  $('viewer-img').src = `/api/attachments/${attachmentId}`;
+  $('viewer').hidden = false;
+}
+
+function closeViewer() {
+  $('viewer').hidden = true;
+  // src 를 비워 다음에 열 때 이전 사진이 잠깐 보이지 않게 한다.
+  $('viewer-img').removeAttribute('src');
+}
+
+/**
+ * 썸네일 탭을 가로채 원본을 띄운다.
+ *
+ * 목록에서는 카드를 누르면 상세가 열리므로, 사진을 눌렀을 때는 그 동작을 막아야 한다.
+ */
+function handleThumbClick(event) {
+  const thumb = event.target.closest('[data-view]');
+  if (!thumb) return false;
+  event.stopPropagation();
+  openViewer(thumb.dataset.view);
+  return true;
 }
 
 async function loadRecent() {
@@ -334,6 +373,8 @@ async function loadList() {
 }
 
 async function onListClick(event) {
+  if (handleThumbClick(event)) return;
+
   const doneButton = event.target.closest('[data-done]');
   const delButton = event.target.closest('[data-del]');
 
@@ -408,7 +449,7 @@ function renderDetail() {
   $('detail-title').textContent = `${entry.occurredOn} ${entry.occurredAt ? entry.occurredAt.slice(0, 5) : ''}`;
 
   const photos = entry.attachments
-    .map((a) => `<img src="/api/attachments/${a.id}?thumb=true" alt="첨부" data-attachment="${a.id}">`)
+    .map((a) => `<img src="/api/attachments/${a.id}?thumb=true" alt="첨부" data-view="${a.id}">`)
     .join('');
 
   $('detail-body').innerHTML = `
@@ -565,6 +606,7 @@ function bindDetailEvents() {
     }
   };
 
+  $('d-photos').onclick = handleThumbClick;
   $('d-persons').onchange = onPersonChange;
   $('d-persons').onclick = async (event) => {
     const button = event.target.closest('[data-remove-person]');
@@ -750,6 +792,7 @@ function init() {
 
   $('list').addEventListener('click', onListClick);
   $('recent').addEventListener('click', (event) => {
+    if (handleThumbClick(event)) return;
     const card = event.target.closest('.card');
     if (card) openDetail(card.dataset.id);
   });
@@ -761,6 +804,12 @@ function init() {
 
   $('settlements').addEventListener('click', onSettlementClick);
   $('btn-import').onclick = runImport;
+
+  $('viewer').onclick = closeViewer;
+  // 폰에서 뒤로가기로 닫히길 기대하는 동작에 맞춘다.
+  window.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') closeViewer();
+  });
 
   $('detail-close').onclick = closeDetail;
   $('detail').addEventListener('click', (event) => {
