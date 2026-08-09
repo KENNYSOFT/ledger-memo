@@ -116,6 +116,30 @@ curl -sf -b "$COOKIES" -X POST -H "X-XSRF-TOKEN: $CSRF" "$BASE/api/entries/$ID/r
 # 힌트는 데이터가 없으면 빈 목록을 돌려준다. 빈 컬렉션 직렬화 경로를 함께 검증한다.
 curl -sf -b "$COOKIES" "$BASE/api/hints" | grep -q '"categories"' || fail "힌트 조회가 실패했다"
 
+# 첨부 업로드/조회. 목록이 대표 썸네일 id 를 돌려주는지까지 본다.
+# 원본과 썸네일을 함께 올린다 (클라이언트가 Canvas 로 만들어 보내는 것과 같은 형태).
+# 아래는 1x1 흰 픽셀 PNG 69바이트다. 이스케이프로 쓰면 셸에 따라 깨지므로 base64 로 둔다.
+PNG=$(mktemp --suffix=.png)
+printf '%s' 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4//8/AAX+Av4N70a4AAAAAElFTkSuQmCC' \
+  | base64 -d > "$PNG"
+[ -s "$PNG" ] || fail "테스트용 PNG 를 만들지 못했다"
+ATTACH=$(curl -sf -b "$COOKIES" -H "X-XSRF-TOKEN: $CSRF" \
+  -F "file=@$PNG;type=image/png" -F "thumb=@$PNG;type=image/png" \
+  "$BASE/api/entries/$ID/attachments") || fail "첨부 업로드가 실패했다"
+echo "$ATTACH" | grep -q '"hasThumb":true' || fail "썸네일이 저장되지 않았다: $ATTACH"
+
+ATTACH_ID=$(echo "$ATTACH" | grep -o '"id":[0-9]*' | head -1 | cut -d: -f2)
+curl -sf -b "$COOKIES" -o /dev/null "$BASE/api/attachments/$ATTACH_ID" || fail "원본 조회가 실패했다"
+curl -sf -b "$COOKIES" -o /dev/null "$BASE/api/attachments/$ATTACH_ID?thumb=true" || fail "썸네일 조회가 실패했다"
+
+# 목록에 대표 썸네일 id 가 실려야 카드에서 사진을 띄울 수 있다.
+curl -sf -b "$COOKIES" "$BASE/api/entries" | grep -q "\"firstAttachmentId\":$ATTACH_ID" \
+  || fail "목록에 대표 첨부 id 가 없다"
+
+curl -sf -b "$COOKIES" -H "X-XSRF-TOKEN: $CSRF" -X DELETE "$BASE/api/attachments/$ATTACH_ID" \
+  || fail "첨부 삭제가 실패했다"
+rm -f "$PNG"
+
 # 태그를 붙이고 되읽어 PATCH 의 태그 교체가 동작하는지 확인한다.
 curl -sf -b "$COOKIES" -X PATCH -H 'Content-Type: application/json' -H "X-XSRF-TOKEN: $CSRF" \
   -d '{"tags":["회사","가족"],"categoryHint":"식비"}' "$BASE/api/entries/$ID" \
