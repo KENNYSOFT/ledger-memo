@@ -33,6 +33,20 @@ spring:
       # 원본과 썸네일을 한 요청에 함께 올린다.
       max-request-size: 20MB
 
+  web:
+    resources:
+      # 화면(HTML/JS/CSS)을 이미지 밖에서 서빙해 native 재빌드 없이 갱신한다.
+      # 볼륨이 없는 환경(로컬 실행, 테스트)에서는 뒤의 classpath 로 떨어진다.
+      static-locations:
+        - file:${LEDGER_STATIC_ROOT:/data/static}/
+        - classpath:/static/
+      cache:
+        # 볼륨 파일을 바꿨을 때 바로 보이도록 짧게 둔다. 첨부 이미지는 컨트롤러가
+        # 별도로 긴 캐시를 지정하므로 영향받지 않는다.
+        cachecontrol:
+          max-age: 60
+          cache-public: false
+
 server:
   # 이미지에 담기는 기본값. 배포에서는 SERVER_PORT / SERVER_ADDRESS 환경변수로 덮어쓴다
   # (host 네트워크에서 루프백에만 리슨시키기 위함 — DESIGN.md 7.2).
