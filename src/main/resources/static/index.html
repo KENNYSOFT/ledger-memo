@@ -188,6 +188,34 @@
   #d-tag-suggest .chip { cursor: pointer; color: var(--accent); border-color: var(--accent); }
   .settle-card { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
   .settle-card .amount { font-size: 17px; }
+
+  /* 분개장 미리보기 */
+  #journal-box, #d-journal-box {
+    margin-top: 12px; border: 1px solid var(--line); border-radius: 10px;
+    background: var(--card); overflow: hidden;
+  }
+  .journal-head {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 8px 10px; border-bottom: 1px solid var(--line);
+  }
+  .journal-title { font-size: 13px; font-weight: 600; color: var(--muted); }
+  .jrow {
+    display: grid; grid-template-columns: 1fr auto; gap: 2px 8px;
+    padding: 8px 10px; border-bottom: 1px solid var(--line); font-size: 13px;
+  }
+  .jrow:last-child { border-bottom: none; }
+  .jrow .j-item { color: var(--muted); font-size: 12px; }
+  .jrow .j-amount { font-variant-numeric: tabular-nums; font-weight: 600; text-align: right; }
+  .jrow .j-account { font-weight: 600; }
+  .jrow .j-detail { color: var(--muted); font-size: 12px; grid-column: 1 / -1; }
+  /* 사용자가 채워야 하는 자리 */
+  .jrow.attention .j-account { color: var(--warn); }
+  .journal-sum {
+    display: flex; justify-content: space-between; gap: 8px;
+    padding: 8px 10px; font-size: 12px; color: var(--muted);
+    background: var(--bg);
+  }
+  .journal-sum.unbalanced { color: var(--danger); font-weight: 600; }
 </style>
 </head>
 <body>
@@ -204,6 +232,15 @@
               placeholder="원조해장촌 2인세트 4.5 소주2 1.0 맥주3 1.5"></textarea>
     <div class="chips" id="chips"></div>
     <div id="queued" hidden></div>
+
+    <!-- 분개장에 옮기면 어떤 모양이 되는지 바로 보여준다. -->
+    <div id="journal-box" hidden>
+      <div class="journal-head">
+        <span class="journal-title">분개장 미리보기</span>
+        <button type="button" class="icon" id="btn-copy-journal">복사</button>
+      </div>
+      <div id="journal"></div>
+    </div>
 
     <div class="row">
       <button class="ghost" id="btn-camera">촬영</button>

@@ -93,10 +93,17 @@ echo "$CREATED" | grep -q '"place":"원조해장촌"' || fail "장소가 다르�
 ID=$(echo "$CREATED" | grep -o '"id":[0-9]*' | head -1 | cut -d: -f2)
 [ -n "$ID" ] || fail "생성된 id 를 읽지 못했다: $CREATED"
 
-# 파싱 미리보기도 같은 직렬화 경로를 탄다.
-curl -sf -b "$COOKIES" -H 'Content-Type: application/json' -H "X-XSRF-TOKEN: $CSRF" \
-  -d '{"text":"택시 8100"}' "$BASE/api/parse" | grep -q '"totalAmount":8100' \
-  || fail "파싱 미리보기가 실패했다"
+# 파싱 미리보기도 같은 직렬화 경로를 탄다. 분개 미리보기가 함께 실려야 한다.
+PARSED=$(curl -sf -b "$COOKIES" -H 'Content-Type: application/json' -H "X-XSRF-TOKEN: $CSRF" \
+  -d '{"text":"택시 8100"}' "$BASE/api/parse") || fail "파싱 미리보기가 실패했다"
+echo "$PARSED" | grep -q '"totalAmount":8100' || fail "파싱 결과가 다르다: $PARSED"
+echo "$PARSED" | grep -q '"journal"' || fail "분개 미리보기가 응답에 없다"
+
+# 저장된 기록의 분개. 비용 행 + 결제 행이 나오고 차대변이 맞아야 한다.
+JOURNAL=$(curl -sf -b "$COOKIES" "$BASE/api/entries/$ID/journal") || fail "분개 조회가 실패했다"
+echo "$JOURNAL" | grep -q '"비용의 발생 | 대변"' || fail "비용 행이 없다: $JOURNAL"
+echo "$JOURNAL" | grep -q '"debitTotal":55000' || fail "차변 합계가 다르다: $JOURNAL"
+echo "$JOURNAL" | grep -q '"creditTotal":55000' || fail "대변 합계가 다르다: $JOURNAL"
 
 # 목록·상세 조회. 저장 응답과 달리 이쪽은 DB 에서 다시 읽은 엔티티를 직렬화하므로,
 # lazy 컬렉션을 트랜잭션 밖에서 건드리면 여기서 500 이 된다 (DESIGN.md 7.1).

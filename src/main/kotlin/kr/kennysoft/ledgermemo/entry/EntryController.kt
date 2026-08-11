@@ -1,6 +1,7 @@
 package kr.kennysoft.ledgermemo.entry
 
 import jakarta.validation.Valid
+import kr.kennysoft.ledgermemo.journal.JournalPreview
 import org.springframework.data.domain.PageRequest
 import org.springframework.format.annotation.DateTimeFormat
 import org.springframework.http.HttpStatus
@@ -23,8 +24,14 @@ class EntryController(
 
     /** 타이핑 중 미리보기. 저장하지 않는다. */
     @PostMapping("/api/parse")
-    fun parse(@Valid @RequestBody request: ParseRequest): ParseResponse =
-        ParseResponse.from(entryService.parse(request.text))
+    fun parse(@Valid @RequestBody request: ParseRequest): ParseResponse {
+        val parsed = entryService.parse(request.text)
+        return ParseResponse.from(parsed, entryService.journalPreview(parsed))
+    }
+
+    /** 저장된 기록의 분개 미리보기. 상세 화면에서 복사해 시트로 옮긴다. */
+    @GetMapping("/api/entries/{id}/journal")
+    fun journal(@PathVariable id: Long): JournalPreview = entryService.journalPreview(id)
 
     @PostMapping("/api/entries")
     @ResponseStatus(HttpStatus.CREATED)

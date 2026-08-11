@@ -1,6 +1,7 @@
 package kr.kennysoft.ledgermemo.entry
 
 import jakarta.validation.constraints.Size
+import kr.kennysoft.ledgermemo.journal.JournalPreview
 import kr.kennysoft.ledgermemo.parse.ParsedLine
 import kr.kennysoft.ledgermemo.person.EntryPerson
 import kr.kennysoft.ledgermemo.person.EntryPersonRole
@@ -26,9 +27,11 @@ data class ParseResponse(
     val items: List<ItemResponse>,
     val personNames: List<String>,
     val tags: List<String>,
+    /** 이 입력을 분개장에 옮기면 어떤 모양이 되는지. */
+    val journal: JournalPreview,
 ) {
     companion object {
-        fun from(parsed: ParsedLine) = ParseResponse(
+        fun from(parsed: ParsedLine, journal: JournalPreview) = ParseResponse(
             occurredOn = parsed.occurredOn,
             occurredAt = parsed.occurredAt,
             place = parsed.place,
@@ -39,6 +42,7 @@ data class ParseResponse(
             items = parsed.items.map { ItemResponse(null, it.name, it.qty, it.unitPrice, it.amount) },
             personNames = parsed.personNames,
             tags = parsed.tags,
+            journal = journal,
         )
     }
 }

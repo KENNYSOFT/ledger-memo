@@ -2,6 +2,8 @@ package kr.kennysoft.ledgermemo.entry
 
 import kr.kennysoft.ledgermemo.attachment.AttachmentRepository
 import kr.kennysoft.ledgermemo.attachment.EntryAttachmentCount
+import kr.kennysoft.ledgermemo.journal.JournalPreview
+import kr.kennysoft.ledgermemo.journal.JournalPreviewService
 import kr.kennysoft.ledgermemo.parse.LineParser
 import kr.kennysoft.ledgermemo.parse.ParsedLine
 import kr.kennysoft.ledgermemo.parse.PersonDictionary
@@ -38,6 +40,7 @@ class EntryService(
     private val tagRepository: TagRepository,
     private val attachmentRepository: AttachmentRepository,
     private val parser: LineParser,
+    private val journalPreviewService: JournalPreviewService,
     private val clock: Clock,
 ) {
 
@@ -61,6 +64,12 @@ class EntryService(
     }
 
     fun getDetail(id: Long): EntryDetailResponse = EntryDetailResponse.from(get(id))
+
+    /** 저장된 기록을 분개장 행으로 옮겨 보여준다. 시트에 붙여넣을 형태 그대로다. */
+    fun journalPreview(id: Long): JournalPreview = journalPreviewService.preview(get(id))
+
+    /** 저장 전 입력의 분개 미리보기. 카테고리/결제수단은 아직 없으므로 계정에 ? 가 남는다. */
+    fun journalPreview(parsed: ParsedLine): JournalPreview = journalPreviewService.preview(parsed)
 
     fun recent(): List<EntrySummaryResponse> = toSummaries(entryRepository.findTop3ByOrderByCreatedAtDesc())
 

@@ -93,6 +93,92 @@ function escapeHtml(text) {
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
+// --- 분개장 미리보기 --------------------------------------------------------
+
+/**
+ * 분개장 컬럼 순서. 본 가계부 "분개장" 탭과 같아야 시트에 그대로 붙는다.
+ *
+ * TX#/차변/대변/검증은 비워 둔다. 차대변은 행번호를 참조하는 수식이고 TX# 는 사용자가
+ * 부여하므로, 붙여넣은 뒤 위 행에서 끌어내리면 된다.
+ */
+function journalTsv(preview) {
+  return preview.rows
+    .map((row) => [
+      '',                 // TX#
+      preview.date,
+      preview.time,
+      row.item,
+      row.amount,         // 숫자로 넣는다. "₩ 10,000" 은 시트의 표시 형식이다
+      '', '', '',         // 차변 / 대변 / 검증
+      row.incomeRelated,
+      row.title,
+      row.paymentMethod,
+      row.payee,
+      row.account,
+      row.memo,
+    ].join('\t'))
+    .join('\n');
+}
+
+function renderJournal(container, preview) {
+  if (!preview || preview.rows.length === 0) {
+    container.innerHTML = '<div class="jrow"><span class="j-detail">분개할 금액이 없습니다</span></div>';
+    return;
+  }
+
+  const rows = preview.rows.map((row) => {
+    // 결제 행에만 있는 값들. 비용 행은 비어 있는 것이 정상이다.
+    const detail = [row.title, row.paymentMethod, row.payee, row.memo]
+      .filter((v) => v)
+      .join(' · ');
+    const attention = row.account.includes('?') ? ' attention' : '';
+    return `
+      <div class="jrow${attention}">
+        <span class="j-account">${escapeHtml(row.account)}</span>
+        <span class="j-amount">${formatAmount(row.amount)}</span>
+        <span class="j-item">${escapeHtml(row.item)}</span>
+        <span></span>
+        ${detail ? `<span class="j-detail">${escapeHtml(detail)}</span>` : ''}
+      </div>`;
+  }).join('');
+
+  const balanced = preview.debitTotal === preview.creditTotal;
+  const sum = `
+    <div class="journal-sum${balanced ? '' : ' unbalanced'}">
+      <span>차변 ${formatAmount(preview.debitTotal)} / 대변 ${formatAmount(preview.creditTotal)}</span>
+      <span>${balanced ? '균형' : '불균형'}</span>
+    </div>`;
+
+  container.innerHTML = rows + sum;
+}
+
+/** 클립보드 복사. HTTPS 가 아니면 Clipboard API 를 못 쓰므로 선택 방식으로 떨어진다. */
+async function copyText(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    const area = document.createElement('textarea');
+    area.value = text;
+    area.style.position = 'fixed';
+    area.style.opacity = '0';
+    document.body.appendChild(area);
+    area.select();
+    const ok = document.execCommand('copy');
+    document.body.removeChild(area);
+    return ok;
+  }
+}
+
+async function copyJournal(preview) {
+  if (!preview || preview.rows.length === 0) {
+    toast('복사할 분개가 없습니다');
+    return;
+  }
+  const ok = await copyText(journalTsv(preview));
+  toast(ok ? `${preview.rows.length}행 복사했습니다` : '복사에 실패했습니다');
+}
+
 function schedulePreview() {
   clearTimeout(parseTimer);
   parseTimer = setTimeout(async () => {
@@ -100,11 +186,14 @@ function schedulePreview() {
     if (!text) {
       lastParsed = null;
       $('chips').innerHTML = '';
+      $('journal-box').hidden = true;
       return;
     }
     try {
       lastParsed = await api('/api/parse', json('POST', { text }));
       renderChips(lastParsed);
+      renderJournal($('journal'), lastParsed.journal);
+      $('journal-box').hidden = false;
     } catch (error) {
       // 오프라인이면 미리보기만 포기한다. 저장은 큐로 처리된다.
       console.debug('parse 실패', error);
@@ -208,6 +297,7 @@ async function save() {
 function resetForm() {
   $('line').value = '';
   $('chips').innerHTML = '';
+  $('journal-box').hidden = true;
   pendingPhotos = [];
   lastParsed = null;
   renderPendingThumbs();
@@ -399,6 +489,7 @@ async function onListClick(event) {
 // --- 상세 / 보강 -------------------------------------------------------------
 
 let detailEntry = null;
+let detailJournal = null;
 
 async function openDetail(id) {
   try {
@@ -413,6 +504,7 @@ async function openDetail(id) {
 function closeDetail() {
   $('detail').hidden = true;
   detailEntry = null;
+  detailJournal = null;
 }
 
 function itemRow(item, index) {
@@ -506,11 +598,35 @@ function renderDetail() {
     <div class="row">
       <button class="ghost" id="d-reparse">원문 재파싱</button>
       <button class="primary" id="d-save">저장</button>
+    </div>
+
+    <div id="d-journal-box">
+      <div class="journal-head">
+        <span class="journal-title">분개장 미리보기</span>
+        <button type="button" class="icon" id="d-copy-journal">복사</button>
+      </div>
+      <div id="d-journal"></div>
     </div>`;
 
   loadPersonOptions();
   applyHints();
   bindDetailEvents();
+  loadDetailJournal();
+}
+
+/**
+ * 저장된 기록의 분개를 받아 그린다.
+ *
+ * 작성 화면과 달리 카테고리/결제수단이 채워져 있어 계정이 실제 값으로 나온다. 저장 직후에도
+ * 다시 불러 방금 고친 내용이 반영되게 한다.
+ */
+async function loadDetailJournal() {
+  try {
+    detailJournal = await api(`/api/entries/${detailEntry.id}/journal`);
+    renderJournal($('d-journal'), detailJournal);
+  } catch (error) {
+    console.debug('분개 미리보기 실패', error);
+  }
 }
 
 /**
@@ -588,6 +704,7 @@ function bindDetailEvents() {
   $('d-save').onclick = saveDetail;
   $('d-reparse').onclick = reparseDetail;
   $('d-tag-suggest').onclick = onTagSuggestClick;
+  $('d-copy-journal').onclick = () => copyJournal(detailJournal);
 
   $('d-add-photo').onclick = () => $('d-photo-input').click();
   $('d-photo-input').onchange = async (event) => {
@@ -780,6 +897,7 @@ function init() {
   $('btn-save').onclick = save;
 
   // 촬영은 카메라를 바로 열고(capture), 갤러리는 기기의 선택 화면을 띄운다.
+  $('btn-copy-journal').onclick = () => copyJournal(lastParsed && lastParsed.journal);
   $('btn-camera').onclick = () => $('photo-camera').click();
   $('btn-gallery').onclick = () => $('photo-gallery').click();
   ['photo-camera', 'photo-gallery'].forEach((id) => {
