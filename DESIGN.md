@@ -499,6 +499,7 @@ podman run -d --name ledger-mysql --network=host --restart=always \
 
 podman run -d --name ledger-memo --network=host --restart=always \
   -v ~/ledger-memo/att:/data/att:Z \
+  -v ~/ledger-memo/static:/data/static:Z \
   --env-file ~/.config/ledger-memo/env \
   ghcr.io/kennysoft/ledger-memo:latest
 ```
@@ -527,6 +528,7 @@ podman pull ghcr.io/kennysoft/ledger-memo:latest
 podman rm -f ledger-memo
 podman run -d --name ledger-memo --network=host --restart=always \
   -v ~/ledger-memo/att:/data/att:Z \
+  -v ~/ledger-memo/static:/data/static:Z \
   --env-file ~/.config/ledger-memo/env \
   ghcr.io/kennysoft/ledger-memo:latest
 ```

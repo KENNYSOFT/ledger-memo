@@ -188,6 +188,7 @@ mkdir -p ~/ledger-memo/att
 
 podman run -d --name ledger-memo --network=host --restart=always \
   -v ~/ledger-memo/att:/data/att:Z \
+  -v ~/ledger-memo/static:/data/static:Z \
   --env-file ~/.config/ledger-memo/env \
   ghcr.io/kennysoft/ledger-memo:latest
 ```
@@ -249,12 +250,31 @@ podman pull ghcr.io/kennysoft/ledger-memo:latest
 podman rm -f ledger-memo
 podman run -d --name ledger-memo --network=host --restart=always \
   -v ~/ledger-memo/att:/data/att:Z \
+  -v ~/ledger-memo/static:/data/static:Z \
   --env-file ~/.config/ledger-memo/env \
   ghcr.io/kennysoft/ledger-memo:latest
 ```
 
 `podman auto-update` 는 systemd 로 관리되는 컨테이너만 대상이라 이 구성에서는 쓸 수 없다.
 위 명령을 스크립트로 두고 호출한다 (DESIGN.md 7.5).
+
+## 화면만 고칠 때 (빌드 없이)
+
+HTML/JS/CSS 는 이미지 밖 볼륨에서 서빙하므로 **native 재빌드도, 컨테이너 재생성도 필요 없다.**
+파일만 올리면 새로 고침으로 반영된다.
+
+```sh
+./scripts/deploy-static.sh
+```
+
+native 빌드가 수 분 걸리는 데 비해 이쪽은 몇 초다. 화면을 다듬는 동안에는 이걸 쓴다.
+
+- 앱은 `spring.web.resources.static-locations` 에서 **볼륨을 먼저, classpath 를 나중에** 본다.
+  볼륨이 비어 있거나 마운트되지 않았으면 이미지에 담긴 화면으로 동작한다 (로컬 실행도 동일).
+- 서버에서 파일을 지워도 이미지 쪽으로 떨어지므로 화면이 사라지지 않는다.
+- **JS/HTML 구조가 API 와 함께 바뀐 경우에는 이 방법만으로 부족하다.** 서버 코드가 포함된
+  변경은 이미지를 새로 만들어야 한다.
+- 서비스 워커가 앱 셸을 캐시하므로 폰에서는 한 번 더 새로 고쳐야 할 수 있다.
 
 ## 백업
 
