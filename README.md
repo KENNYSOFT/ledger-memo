@@ -242,8 +242,29 @@ curl -s -o /dev/null -w '%{http_code}\n' https://memo.kennysoft.kr/login.html
 
 ## 재배포
 
-`main` push → Actions 가 ARM64 runner 에서 native 빌드 → GHCR 이미지 push. 서버에서는
-컨테이너를 교체한다.
+push 한 뒤 로컬에서 스크립트 하나로 끝낸다. CI 통과를 기다려 이미지를 교체하고 화면까지
+올린 다음 기동을 확인한다.
+
+```sh
+./scripts/deploy.sh
+```
+
+- **push 는 하지 않는다.** 미push 커밋이 있으면 알리고 멈춘다 - 무엇을 배포하는지가 분명해야
+  한다.
+- CI 가 실패했거나 이 커밋의 run 이 없으면 배포하지 않는다. 문서만 바뀌어 CI 가 돌지 않는
+  커밋은 `--no-wait` 로 건너뛴다.
+- 🚨 **이미지와 화면을 항상 함께 올린다.** 볼륨이 classpath 보다 우선이므로, 이미지만 새로
+  올리면 볼륨에 남은 옛 화면이 그대로 보인다.
+- `podman rm` 이 rootless overlay 에서 스토리지 정리에 실패하는 경우를 나눠 처리하고, 자동
+  정리가 안 되면 DESIGN.md 7.6 의 절차를 안내한다.
+
+화면만 고쳤다면 훨씬 빠른 경로가 있다 (아래 참고).
+
+```sh
+./scripts/deploy.sh --static
+```
+
+수동으로 하려면 다음과 같다.
 
 ```sh
 podman pull ghcr.io/kennysoft/ledger-memo:latest
