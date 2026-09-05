@@ -59,12 +59,21 @@ run_state() {
 if [ "$WAIT_CI" -eq 1 ]; then
   echo "CI 확인 중..."
   i=0
+  missing=0
   while :; do
     STATE=$(run_state)
     case "$STATE" in
       "completed success") echo "CI 통과"; break ;;
       "completed "*)       fail "CI 가 실패했습니다 ($STATE). gh run list -R $REPO 로 확인하세요." ;;
-      none)                fail "이 커밋의 CI run 이 없습니다. 문서만 바뀐 커밋이면 --no-wait 를 쓰세요." ;;
+      none)
+        # push 직후에는 GitHub 이 아직 run 을 만들지 않았을 수 있다. 여기서 바로 죽으면
+        # `git push; ./scripts/deploy.sh` 를 한 번에 돌릴 수 없으므로 잠깐 기다려 준다.
+        missing=$((missing + 1))
+        [ "$missing" -gt 6 ] \
+          && fail "이 커밋의 CI run 이 2분 안에 생기지 않았습니다. 문서만 바뀐 커밋이면 --no-wait 를 쓰세요."
+        printf '  run 생성 대기 (%d초)\n' "$((missing * 20))"
+        sleep 20
+        ;;
       *)
         i=$((i + 1))
         [ "$i" -gt 60 ] && fail "CI 가 20분 안에 끝나지 않았습니다 (마지막 상태: $STATE)"
