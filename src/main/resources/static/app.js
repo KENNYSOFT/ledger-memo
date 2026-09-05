@@ -279,7 +279,7 @@ async function save() {
     await uploadPhotos(entry.id);
     resetForm();
     toast('저장했습니다');
-    await loadRecent();
+    await refreshLists();
   } catch (error) {
     // 사진은 직렬화가 어려워 큐에 넣지 않는다. 텍스트만 보관하고 복귀 시 보낸다.
     if (!navigator.onLine && text) {
@@ -349,7 +349,7 @@ async function flushQueue() {
     }
   }
   toast('대기열을 전송했습니다');
-  await loadRecent();
+  await refreshLists();
 }
 
 // --- 목록 -------------------------------------------------------------------
@@ -419,6 +419,16 @@ function handleThumbClick(event) {
   return true;
 }
 
+/**
+ * 기록을 바꾼 뒤 두 목록을 함께 맞춘다.
+ *
+ * 상세는 바텀 시트라 닫아도 탭 전환이 일어나지 않는다. 한쪽만 갱신하면 다른 화면에 옛
+ * 내용이 남는다 (최근 목록에서 카드를 열어 고치고 닫았을 때가 그렇다).
+ */
+async function refreshLists() {
+  await Promise.all([loadRecent(), loadList()]);
+}
+
 async function loadRecent() {
   try {
     const entries = await api('/api/entries/recent');
@@ -472,13 +482,13 @@ async function onListClick(event) {
     // 버튼 라벨이 곧 다음 상태다. '되돌리기'가 보이면 지금은 완료 상태다.
     const next = doneButton.textContent.trim() === '되돌리기' ? 'OPEN' : 'DONE';
     await api(`/api/entries/${doneButton.dataset.done}/status`, json('PUT', { status: next }));
-    await loadList();
+    await refreshLists();
     return;
   }
   if (delButton) {
     if (!confirm('삭제할까요?')) return;
     await api(`/api/entries/${delButton.dataset.del}`, { method: 'DELETE' });
-    await loadList();
+    await refreshLists();
     return;
   }
 
@@ -717,6 +727,7 @@ function bindDetailEvents() {
       pendingPhotos = [];
       renderPendingThumbs();
       await openDetail(detailEntry.id);
+      await refreshLists();
       toast('사진을 추가했습니다');
     } catch (error) {
       toast(`사진 업로드 실패: ${error.message}`);
@@ -788,7 +799,7 @@ async function saveDetail() {
     toast('저장했습니다');
     // 새로 쓴 카테고리/태그가 다음 자동완성에 반영되도록 캐시를 버린다.
     hintsCache = null;
-    await loadList();
+    await refreshLists();
   } catch (error) {
     toast(`저장 실패: ${error.message}`);
   }
@@ -799,6 +810,7 @@ async function reparseDetail() {
   try {
     await api(`/api/entries/${detailEntry.id}/reparse`, { method: 'POST' });
     await openDetail(detailEntry.id);
+    await refreshLists();
     toast('재파싱했습니다');
   } catch (error) {
     toast(`재파싱 실패: ${error.message}`);
@@ -864,7 +876,7 @@ async function runImport() {
 
     // 성공분만 입력창에서 지운다. 실패한 줄은 남겨 다시 시도할 수 있게 한다.
     $('import-text').value = result.failed.map((f) => f.text).join('\n');
-    await loadRecent();
+    await refreshLists();
   } catch (error) {
     toast(`임포트 실패: ${error.message}`);
   } finally {
@@ -881,6 +893,7 @@ function showTab(name) {
     $(`view-${tab}`).hidden = tab !== name;
     $(`tab-${tab}`).setAttribute('aria-selected', String(tab === name));
   });
+  if (name === 'write') loadRecent();
   if (name === 'list') loadList();
   if (name === 'settle') loadSettlements();
 }
