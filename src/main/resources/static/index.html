@@ -160,12 +160,28 @@
   .sheet-inner {
     background: var(--bg); width: 100%; max-width: 720px;
     max-height: 92vh; overflow-y: auto;
-    border-radius: 14px 14px 0 0; padding: 12px 12px calc(20px + env(safe-area-inset-bottom));
+    border-radius: 14px 14px 0 0;
+    /* 위쪽 여백은 헤더가 직접 가진다. 여기에 padding-top 을 두면 헤더가 top:0 에 붙었을 때
+       그 위 여백으로 내용이 지나가 비쳐 보인다. */
+    padding: 0 12px calc(20px + env(safe-area-inset-bottom));
+    /* 기본 스크롤바는 둥근 모서리를 침범해 지저분하다. 얇고 조용하게 둔다. */
+    scrollbar-width: thin;
+    scrollbar-color: var(--line) transparent;
   }
+  .sheet-inner::-webkit-scrollbar { width: 6px; }
+  .sheet-inner::-webkit-scrollbar-track { background: transparent; }
+  .sheet-inner::-webkit-scrollbar-thumb { background: var(--line); border-radius: 3px; }
+  .sheet-inner::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+
   .sheet-head {
     position: sticky; top: 0; background: var(--bg);
+    /* z-index 가 없으면 뒤따르는 입력 필드가 헤더 위에 그려져 내용이 비쳐 보인다. */
+    z-index: 2;
     display: flex; justify-content: space-between; align-items: center;
-    padding: 4px 0 10px; margin-bottom: 4px; border-bottom: 1px solid var(--line);
+    /* 좌우로 시트 패딩만큼 넓혀 양옆 틈으로도 내용이 지나가지 않게 한다. */
+    margin: 0 -12px 4px;
+    padding: 14px 12px 10px;
+    border-bottom: 1px solid var(--line);
   }
   button.icon { background: none; border: none; color: var(--accent); font-size: 15px; padding: 6px; }
 
