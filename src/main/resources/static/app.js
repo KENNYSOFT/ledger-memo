@@ -501,6 +501,14 @@ async function onListClick(event) {
 let detailEntry = null;
 let detailJournal = null;
 
+/**
+ * 상세를 그린 시점의 입력값. 저장 요청 본문과 같은 모양으로 직렬화해 둔다.
+ *
+ * 입력 필드끼리가 아니라 "저장하면 보낼 값" 끼리 비교해야 저장해도 달라지지 않는 변화
+ * (빈 품목 줄 추가, 앞뒤 공백)를 변경으로 보지 않는다.
+ */
+let detailSnapshot = null;
+
 async function openDetail(id) {
   try {
     detailEntry = await api(`/api/entries/${id}`);
@@ -515,6 +523,21 @@ function closeDetail() {
   $('detail').hidden = true;
   detailEntry = null;
   detailJournal = null;
+  detailSnapshot = null;
+}
+
+function isDetailDirty() {
+  return detailSnapshot !== null && JSON.stringify(collectDetailBody()) !== detailSnapshot;
+}
+
+/**
+ * 바깥 영역을 눌러 닫을 때 쓴다. 저장하지 않은 변경이 있으면 한 번 묻는다.
+ *
+ * 폰에서는 스크롤하다 시트 바깥을 건드리기 쉬워, 고친 내용이 소리 없이 사라지면 안 된다.
+ */
+function requestCloseDetail() {
+  if (isDetailDirty() && !confirm('저장하지 않은 변경이 있습니다. 저장하지 않고 닫을까요?')) return;
+  closeDetail();
 }
 
 function itemRow(item, index) {
@@ -617,6 +640,9 @@ function renderDetail() {
       </div>
       <div id="d-journal"></div>
     </div>`;
+
+  // 뒤따르는 비동기 작업(사람 목록, 자동완성)은 입력값을 바꾸지 않으므로 여기서 찍어도 된다.
+  detailSnapshot = JSON.stringify(collectDetailBody());
 
   loadPersonOptions();
   applyHints();
@@ -778,9 +804,10 @@ function numberOrNull(value) {
   return text === '' ? null : Number(text);
 }
 
-async function saveDetail() {
+/** 상세 입력값을 저장 요청 본문으로 모은다. 변경 여부 판단도 이 값으로 한다. */
+function collectDetailBody() {
   // 문자열 필드는 빈 값도 그대로 보낸다. 서버가 ""를 "지움"으로 해석한다.
-  const body = {
+  return {
     occurredOn: $('d-date').value || null,
     occurredAt: $('d-time').value ? `${$('d-time').value}:00` : null,
     place: $('d-place').value.trim(),
@@ -792,6 +819,10 @@ async function saveDetail() {
     items: collectItems(),
     tags: $('d-tags').value.split(',').map((tag) => tag.trim()).filter((tag) => tag !== ''),
   };
+}
+
+async function saveDetail() {
+  const body = collectDetailBody();
 
   try {
     await api(`/api/entries/${detailEntry.id}`, json('PATCH', body));
@@ -944,8 +975,8 @@ function init() {
 
   $('detail-close').onclick = closeDetail;
   $('detail').addEventListener('click', (event) => {
-    // 바깥 어두운 영역을 누르면 닫는다.
-    if (event.target.id === 'detail') closeDetail();
+    // 바깥 어두운 영역을 누르면 닫는다. 실수로 건드리기 쉬운 자리라 변경이 있으면 먼저 묻는다.
+    if (event.target.id === 'detail') requestCloseDetail();
   });
 
   window.addEventListener('online', flushQueue);
