@@ -48,7 +48,12 @@ dependencies {
     testImplementation("org.springframework.boot:spring-boot-starter-security-test")
     testImplementation("org.springframework.boot:spring-boot-starter-validation-test")
     testImplementation("org.springframework.boot:spring-boot-starter-actuator-test")
-    testImplementation("org.jetbrains.kotlin:kotlin-test-junit5")
+    // kotest BOM 은 kotest 아티팩트만 관리한다. JUnit Platform 버전은 Spring Boot BOM 이
+    // 정한 것을 그대로 쓴다 (kotest 6.2 는 1.13 기준으로 빌드됐지만 6.0 에서 동작한다).
+    testImplementation(platform("io.kotest:kotest-bom:6.2.5"))
+    testImplementation("io.kotest:kotest-runner-junit5")
+    testImplementation("io.kotest:kotest-assertions-core")
+    testImplementation("io.kotest:kotest-extensions-spring")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 

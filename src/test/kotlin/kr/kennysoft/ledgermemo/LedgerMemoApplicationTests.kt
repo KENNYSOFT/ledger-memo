@@ -1,6 +1,8 @@
 package kr.kennysoft.ledgermemo
 
-import org.junit.jupiter.api.Test
+import io.kotest.core.extensions.ApplyExtension
+import io.kotest.core.spec.style.FreeSpec
+import io.kotest.extensions.spring.SpringExtension
 import org.springframework.boot.test.context.SpringBootTest
 
 /**
@@ -8,14 +10,17 @@ import org.springframework.boot.test.context.SpringBootTest
  *
  * MySQL 연결이 필요하므로 CI 에서는 MySQL service container 로 실행된다
  * (LEDGER_DB_* 환경변수 주입). 로컬에서는 DB 없이 컴파일 검증만 수행한다.
+ *
+ * 컨텍스트는 [SpringExtension] 이 스펙 인스턴스를 만들 때 로드한다. 테스트 본문이 비어 있어도
+ * 로드에 실패하면 인스턴스를 만들지 못해 이 스펙이 실패한다.
  */
 @SpringBootTest(properties = [TEST_USERNAME, TEST_PASSWORD_HASH, TEST_REMEMBER_ME_KEY, TEST_ATTACHMENT_ROOT])
-class LedgerMemoApplicationTests {
+@ApplyExtension(SpringExtension::class)
+class LedgerMemoApplicationTests : FreeSpec({
 
-    @Test
-    fun contextLoads() {
+    "컨텍스트가 뜬다" {
     }
-}
+})
 
 /**
  * 인증 설정은 기본값이 없어 미주입 시 기동이 실패한다 (fail-fast). 테스트에서는 값을 직접 준다.
