@@ -371,7 +371,7 @@ function entryCard(entry, options = {}) {
     : '';
 
   return `
-    <div class="card" data-id="${entry.id}">
+    <div class="card${entry.status === 'DONE' ? ' done' : ''}" data-id="${entry.id}">
       <div class="top">
         <span class="place">${escapeHtml(entry.place || '(장소 없음)')}</span>
         <span class="amount">${formatAmount(entry.totalAmount)}</span>

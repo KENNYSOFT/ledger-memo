@@ -105,6 +105,9 @@
     background: var(--bg);
   }
   .card .more { color: var(--muted); font-size: 12px; margin-top: 4px; }
+  /* 최근 목록에서 분개장에 옮긴 기록은 흐리게 둔다. 아직 할 일이 남은 기록이 먼저 눈에 들어와야 한다.
+     목록 탭은 상태 필터와 되돌리기 버튼이 따로 있어 그대로 둔다. */
+  #recent .card.done { opacity: .5; }
 
   /* 원본 보기 */
   .viewer {
