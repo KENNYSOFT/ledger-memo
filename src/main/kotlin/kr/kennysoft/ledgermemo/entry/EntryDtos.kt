@@ -178,6 +178,8 @@ data class EntrySummaryResponse(
     val uncertain: Boolean,
     val status: EntryStatus,
     val rawText: String?,
+    /** 목록에서 메모가 있는 기록을 표시하는 데 쓴다. */
+    val memo: String?,
     val attachmentCount: Int,
     /** 목록에 띄울 대표 썸네일. 첨부가 없으면 null. */
     val firstAttachmentId: Long?,
@@ -192,6 +194,7 @@ data class EntrySummaryResponse(
             uncertain = entry.uncertain,
             status = entry.status,
             rawText = entry.rawText,
+            memo = entry.memo,
             attachmentCount = attachmentCount,
             firstAttachmentId = firstAttachmentId,
         )

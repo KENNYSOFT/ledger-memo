@@ -354,8 +354,18 @@ async function flushQueue() {
 
 // --- 목록 -------------------------------------------------------------------
 
+/** 메모가 있는 기록에 붙이는 아이콘. 접힌 모서리가 있는 쪽지 모양이다. */
+const MEMO_ICON = '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">'
+  + '<path d="M3 2.5h7l3 3v8H3z M10 2.5v3h3 M5.5 8.5h5 M5.5 11h3.5"/></svg>';
+
 function entryCard(entry, options = {}) {
   const time = entry.occurredAt ? entry.occurredAt.slice(0, 5) : '';
+
+  // 메모는 목록에 펼치지 않고 있다는 것만 알린다. 내용은 상세에서 보고, 데스크톱에서는 올려 보면 뜬다.
+  const memo = (entry.memo || '').trim();
+  const memoFlag = memo
+    ? `<span class="memo-flag" role="img" aria-label="메모 있음" title="${escapeHtml(memo)}">${MEMO_ICON}</span>`
+    : '';
   const actions = options.withActions
     ? `<div class="actions">
          <button class="done" data-done="${entry.id}">${entry.status === 'DONE' ? '되돌리기' : '완료'}</button>
@@ -378,7 +388,8 @@ function entryCard(entry, options = {}) {
       </div>
       ${entry.rawText ? `<div class="raw">${escapeHtml(entry.rawText)}</div>` : ''}
       <div class="meta">
-        <span>${time}</span>
+        ${time ? `<span>${time}</span>` : ''}
+        ${memoFlag}
         ${entry.uncertain ? '<span>불확실</span>' : ''}
         ${entry.status === 'DONE' ? '<span>완료</span>' : ''}
       </div>

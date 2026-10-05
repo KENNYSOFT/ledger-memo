@@ -93,7 +93,10 @@
   .card .place { font-weight: 600; }
   .card .amount { font-variant-numeric: tabular-nums; font-weight: 600; }
   .card .raw { color: var(--muted); font-size: 13px; margin-top: 4px; word-break: break-all; }
-  .card .meta { color: var(--muted); font-size: 12px; margin-top: 6px; display: flex; gap: 8px; }
+  .card .meta { color: var(--muted); font-size: 12px; margin-top: 6px; display: flex; gap: 8px; align-items: center; }
+  /* 회색 표시 줄 안에서도 눈에 띄도록 강조색을 쓴다. */
+  .card .memo-flag { display: inline-flex; color: var(--accent); }
+  .card .memo-flag svg { fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linejoin: round; stroke-linecap: round; }
   .card .actions { display: flex; gap: 6px; margin-top: 10px; }
   .card .actions button { flex: 1; padding: 8px; font-size: 13px; border-radius: 8px; border: 1px solid var(--line); background: none; color: var(--text); }
   .card .actions button.done { color: var(--accent); border-color: var(--accent); }
