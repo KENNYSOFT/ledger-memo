@@ -405,10 +405,10 @@ function entryCard(entry, options = {}) {
       ${entry.rawText ? `<div class="raw">${escapeHtml(entry.rawText)}</div>` : ''}
       <div class="meta">
         ${occurred ? `<span>${occurred}</span>` : ''}
-        <span>입력 ${formatInputTime(entry.createdAt)}</span>
         ${memoFlag}
         ${entry.uncertain ? '<span>불확실</span>' : ''}
         ${entry.status === 'DONE' ? '<span>완료</span>' : ''}
+        <span class="input-time">입력 ${formatInputTime(entry.createdAt)}</span>
       </div>
       ${photo}
       ${actions}
