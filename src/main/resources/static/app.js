@@ -67,6 +67,17 @@ function formatDate(iso) {
   return `${m}/${d} (${weekday})`;
 }
 
+/**
+ * 서버가 준 저장 시각(UTC 의 ISO 문자열)을 이 기기의 시간대로 `M/D HH:MM` 으로 쓴다.
+ *
+ * 소수 초가 3자리를 넘어 올 수 있는데, 표준이 해석을 보장하는 형식은 3자리까지라 잘라서 넘긴다.
+ */
+function formatInputTime(instant) {
+  const at = new Date(instant.replace(/(\.\d{3})\d+/, '$1'));
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${at.getMonth() + 1}/${at.getDate()} ${pad(at.getHours())}:${pad(at.getMinutes())}`;
+}
+
 // --- 작성 화면 --------------------------------------------------------------
 
 function renderChips(parsed) {
@@ -359,7 +370,12 @@ const MEMO_ICON = '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="
   + '<path d="M3 2.5h7l3 3v8H3z M10 2.5v3h3 M5.5 8.5h5 M5.5 11h3.5"/></svg>';
 
 function entryCard(entry, options = {}) {
-  const time = entry.occurredAt ? entry.occurredAt.slice(0, 5) : '';
+  // 날짜 머리글 아래 놓이는 카드는 시각만 쓰고, 머리글이 없는 목록에서는 발생 날짜를 함께 쓴다.
+  // 최근 저장처럼 저장 순서로 늘어놓는 목록에는 지난 날짜로 적은 기록이 섞인다.
+  const occurred = [
+    options.groupedByDate ? '' : formatDate(entry.occurredOn),
+    entry.occurredAt ? entry.occurredAt.slice(0, 5) : '',
+  ].filter(Boolean).join(' ');
 
   // 메모는 목록에 펼치지 않고 있다는 것만 알린다. 내용은 상세에서 보고, 데스크톱에서는 올려 보면 뜬다.
   const memo = (entry.memo || '').trim();
@@ -388,7 +404,8 @@ function entryCard(entry, options = {}) {
       </div>
       ${entry.rawText ? `<div class="raw">${escapeHtml(entry.rawText)}</div>` : ''}
       <div class="meta">
-        ${time ? `<span>${time}</span>` : ''}
+        ${occurred ? `<span>${occurred}</span>` : ''}
+        <span>입력 ${formatInputTime(entry.createdAt)}</span>
         ${memoFlag}
         ${entry.uncertain ? '<span>불확실</span>' : ''}
         ${entry.status === 'DONE' ? '<span>완료</span>' : ''}
@@ -476,7 +493,7 @@ async function loadList() {
     $('list').innerHTML = [...groups.entries()]
       .map(([date, items]) =>
         `<h2 class="date">${formatDate(date)}</h2>` +
-        items.map((entry) => entryCard(entry, { withActions: true })).join(''))
+        items.map((entry) => entryCard(entry, { withActions: true, groupedByDate: true })).join(''))
       .join('');
   } catch (error) {
     $('list').innerHTML = `<div class="empty">불러오지 못했습니다: ${escapeHtml(error.message)}</div>`;

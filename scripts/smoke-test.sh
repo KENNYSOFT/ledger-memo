@@ -112,6 +112,11 @@ curl -sf -b "$COOKIES" "$BASE/api/entries/recent" > /dev/null || fail "최근 �
 curl -sf -b "$COOKIES" "$BASE/api/entries/$ID" | grep -q '"items"' || fail "상세 조회가 실패했다"
 curl -sf -b "$COOKIES" "$BASE/api/settlements" > /dev/null || fail "정산 조회가 실패했다"
 
+# 카드는 저장 시각을 Date 로 읽어 입력 시각을 띄운다. 숫자가 아니라 ISO 문자열로 실려야 한다.
+RECENT=$(curl -sf -b "$COOKIES" "$BASE/api/entries/recent") || fail "최근 목록 조회가 실패했다"
+echo "$RECENT" | grep -Eq '"createdAt":"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:.]+Z"' \
+  || fail "최근 목록에 저장 시각이 ISO 문자열로 실리지 않았다: $RECENT"
+
 # 상태 전환과 재파싱도 조회한 엔티티를 직렬화한다.
 curl -sf -b "$COOKIES" -X PUT -H 'Content-Type: application/json' -H "X-XSRF-TOKEN: $CSRF" \
   -d '{"status":"DONE"}' "$BASE/api/entries/$ID/status" | grep -q '"DONE"' \

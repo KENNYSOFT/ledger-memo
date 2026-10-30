@@ -177,6 +177,8 @@ data class EntrySummaryResponse(
     val totalAmount: Int?,
     val uncertain: Boolean,
     val status: EntryStatus,
+    /** 저장한 시각. 지난 날짜로 적은 기록이 있어 목록에서 발생 시각과 함께 보여준다. */
+    val createdAt: Instant,
     val rawText: String?,
     /** 목록에서 메모가 있는 기록을 표시하는 데 쓴다. */
     val memo: String?,
@@ -193,6 +195,7 @@ data class EntrySummaryResponse(
             totalAmount = entry.totalAmount,
             uncertain = entry.uncertain,
             status = entry.status,
+            createdAt = entry.createdAt,
             rawText = entry.rawText,
             memo = entry.memo,
             attachmentCount = attachmentCount,
